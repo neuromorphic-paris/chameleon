@@ -123,9 +123,9 @@ namespace chameleon {
             void discardsChanged(QVector2D discards);
 
         public slots:
-            void paint() {
 
-                /// paint sends commands to the GPU.
+            /// paint sends commands to the GPU.
+            void paint() {
                 initializeOpenGLFunctions();
                 if (!_programSetup) {
                     _programSetup = true;
