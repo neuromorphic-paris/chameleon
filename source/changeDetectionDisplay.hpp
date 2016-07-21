@@ -18,10 +18,10 @@ namespace chameleon {
     class ChangeDetectionDisplayRenderer : public QObject, public QOpenGLFunctions {
         Q_OBJECT
         public:
-            ChangeDetectionDisplayRenderer(QSize canvasSize, float decay, float currentTimestamp = 0) :
+            ChangeDetectionDisplayRenderer(QSize canvasSize, float decay, float initialTimestamp) :
                 _canvasSize(std::move(canvasSize)),
                 _decay(decay),
-                _currentTimestamp(currentTimestamp),
+                _currentTimestamp(initialTimestamp),
                 _duplicatedTimestampsAndAreIncreases(_canvasSize.width() * _canvasSize.height() * 2),
                 _programSetup(false)
             {
@@ -87,6 +87,8 @@ namespace chameleon {
             }
 
         public slots:
+
+            /// paint sends commands to the GPU.
             void paint() {
                 initializeOpenGLFunctions();
                 if (!_programSetup) {
@@ -287,10 +289,12 @@ namespace chameleon {
         Q_OBJECT
         Q_PROPERTY(QSize canvasSize READ canvasSize WRITE setCanvasSize)
         Q_PROPERTY(float decay READ decay WRITE setDecay)
+        Q_PROPERTY(float initialTimestamp READ initialTimestamp WRITE setInitialTimestamp)
         public:
             ChangeDetectionDisplay() :
                 _canvasSizeSet(false),
                 _decaySet(false),
+                _initialTimestampSet(false),
                 _rendererReady(false)
             {
                 connect(this, &QQuickItem::windowChanged, this, &ChangeDetectionDisplay::handleWindowChanged);
@@ -324,6 +328,20 @@ namespace chameleon {
                 return _decay;
             }
 
+            /// setInitialTimestamp defines the initial timestamp.
+            /// The initial timestamp will be passed to the openGL renderer, therefore it should only be set once.
+            virtual void setInitialTimestamp(float initialTimestamp) {
+                if (!_initialTimestampSet.load(std::memory_order_relaxed)) {
+                    _initialTimestamp = initialTimestamp;
+                    _initialTimestampSet.store(true, std::memory_order_release);
+                }
+            }
+
+            /// initialTimestamp returns the initial timestamp.
+            virtual float initialTimestamp() const {
+                return _initialTimestamp;
+            }
+
             /// push adds an event to the display.
             template<typename Event>
             void push(Event event) {
@@ -336,10 +354,14 @@ namespace chameleon {
 
             /// sync addapts the renderer to external changes.
             void sync() {
-                if (_canvasSizeSet.load(std::memory_order_acquire) && _decaySet.load(std::memory_order_acquire)) {
+                if (
+                    _canvasSizeSet.load(std::memory_order_acquire)
+                    && _decaySet.load(std::memory_order_acquire)
+                    && _initialTimestampSet.load(std::memory_order_acquire)
+                ) {
                     if (!_changeDetectionDisplayRenderer) {
                         _changeDetectionDisplayRenderer = std::unique_ptr<ChangeDetectionDisplayRenderer>(
-                            new ChangeDetectionDisplayRenderer(_canvasSize, _decay)
+                            new ChangeDetectionDisplayRenderer(_canvasSize, _decay, _initialTimestamp)
                         );
                         connect(
                             window(),
@@ -387,6 +409,8 @@ namespace chameleon {
             std::atomic_bool _canvasSizeSet;
             float _decay;
             std::atomic_bool _decaySet;
+            float _initialTimestamp;
+            std::atomic_bool _initialTimestampSet;
             std::unique_ptr<ChangeDetectionDisplayRenderer> _changeDetectionDisplayRenderer;
             std::atomic_bool _rendererReady;
     };
