@@ -33,6 +33,8 @@ namespace chameleon {
             }
 
         public slots:
+
+            /// paint sends commands to the GPU.
             void paint() {
                 initializeOpenGLFunctions();
                 if (!_programSetup) {
