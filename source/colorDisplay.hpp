@@ -58,23 +58,18 @@ namespace chameleon {
                 _accessingTimeDeltas.clear(std::memory_order_release);
                 _accessingSettings.clear(std::memory_order_release);
             }
-            ~ColorDisplayRenderer() {}
+            ColorDisplayRenderer(const ColorDisplayRenderer&) = delete;
+            ColorDisplayRenderer(ColorDisplayRenderer&&) = default;
+            ColorDisplayRenderer& operator=(const ColorDisplayRenderer&) = delete;
+            ColorDisplayRenderer& operator=(ColorDisplayRenderer&&) = default;
+            virtual ~ColorDisplayRenderer() {}
 
             /// setRenderingArea defines the rendering area.
-            virtual void setRenderingArea(QRectF renderingArea, int windowHeight) {
-                _clearArea = std::move(renderingArea);
+            virtual void setRenderingArea(QRectF clearArea, QRectF paintArea, int windowHeight) {
+                _clearArea = std::move(clearArea);
                 _clearArea.moveTop(windowHeight - _clearArea.top() - _clearArea.height());
-                if (_clearArea.width() * _canvasSize.height() > _clearArea.height() * _canvasSize.width()) {
-                    _paintArea.setWidth(_clearArea.height() * _canvasSize.width() / _canvasSize.height());
-                    _paintArea.setHeight(_clearArea.height());
-                    _paintArea.moveLeft(_clearArea.left() + (_clearArea.width() - _paintArea.width()) / 2);
-                    _paintArea.moveTop(_clearArea.top());
-                } else {
-                    _paintArea.setWidth(_clearArea.width());
-                    _paintArea.setHeight(_clearArea.width()  * _canvasSize.height() / _canvasSize.width());
-                    _paintArea.moveLeft(_clearArea.left());
-                    _paintArea.moveTop(_clearArea.top() + (_clearArea.height() - _paintArea.height()) / 2);
-                }
+                _paintArea = std::move(paintArea);
+                _paintArea.moveTop(windowHeight - _paintArea.top() - _paintArea.height());
             }
 
             /// setDiscards defines the discards.
@@ -404,6 +399,7 @@ namespace chameleon {
         Q_PROPERTY(QVector2D discards READ discards WRITE setDiscards)
         Q_PROPERTY(QVector3D whiteTimeDeltas READ whiteTimeDeltas WRITE setWhiteTimeDeltas)
         Q_PROPERTY(float discardRatio READ discardRatio WRITE setDiscardRatio)
+        Q_PROPERTY(QRectF paintArea READ paintArea)
         public:
             ColorDisplay() :
                 _canvasSizeSet(false),
@@ -415,8 +411,13 @@ namespace chameleon {
                 connect(this, &QQuickItem::windowChanged, this, &ColorDisplay::handleWindowChanged);
                 _accessingRenderer.clear(std::memory_order_release);
             }
+            ColorDisplay(const ColorDisplay&) = delete;
+            ColorDisplay(ColorDisplay&&) = default;
+            ColorDisplay& operator=(const ColorDisplay&) = delete;
+            ColorDisplay& operator=(ColorDisplay&&) = default;
+            virtual ~ColorDisplay() {}
 
-            /// setCanvasSize defines the display size in pixels.
+            /// setCanvasSize defines the display coordinates.
             /// The size will be passed to the openGL renderer, therefore it should only be set once.
             virtual void setCanvasSize(QSize canvasSize) {
                 if (!_canvasSizeSet.load(std::memory_order_relaxed)) {
@@ -478,6 +479,11 @@ namespace chameleon {
                 return _discardRatio;
             }
 
+            /// paintArea returns the paint area in window coordinates.
+            virtual QRectF paintArea() const {
+                return _paintArea;
+            }
+
             /// push adds an event to the display.
             template<typename Event>
             void push(Event event) {
@@ -490,6 +496,9 @@ namespace chameleon {
 
             /// discardsChanged notifies a change in the discards.
             void discardsChanged(QVector2D discards);
+
+            /// paintAreaChanged notifies a paint area change.
+            void paintAreaChanged(QRectF paintArea);
 
         public slots:
 
@@ -523,12 +532,27 @@ namespace chameleon {
                         _rendererReady.store(true, std::memory_order_release);
                         _accessingRenderer.clear(std::memory_order_release);
                     }
-                    auto absoluteRectangle = QRectF(0, 0, width(), height());
+                    auto clearArea = QRectF(0, 0, width(), height());
                     for (auto item = static_cast<QQuickItem*>(this); item; item = item->parentItem()) {
-                        absoluteRectangle.moveLeft(absoluteRectangle.left() + item->x());
-                        absoluteRectangle.moveTop(absoluteRectangle.top() + item->y());
+                        clearArea.moveLeft(clearArea.left() + item->x());
+                        clearArea.moveTop(clearArea.top() + item->y());
                     }
-                    _colorDisplayRenderer->setRenderingArea(std::move(absoluteRectangle), window()->height());
+                    if (clearArea != _clearArea) {
+                        _clearArea = std::move(clearArea);
+                        if (clearArea.width() * _canvasSize.height() > clearArea.height() * _canvasSize.width()) {
+                            _paintArea.setWidth(clearArea.height() * _canvasSize.width() / _canvasSize.height());
+                            _paintArea.setHeight(clearArea.height());
+                            _paintArea.moveLeft(clearArea.left() + (clearArea.width() - _paintArea.width()) / 2);
+                            _paintArea.moveTop(clearArea.top());
+                        } else {
+                            _paintArea.setWidth(clearArea.width());
+                            _paintArea.setHeight(clearArea.width()  * _canvasSize.height() / _canvasSize.width());
+                            _paintArea.moveLeft(clearArea.left());
+                            _paintArea.moveTop(clearArea.top() + (clearArea.height() - _paintArea.height()) / 2);
+                        }
+                        _colorDisplayRenderer->setRenderingArea(_clearArea, _paintArea, window()->height());
+                        paintAreaChanged(_paintArea);
+                    }
                 }
             }
 
@@ -575,5 +599,7 @@ namespace chameleon {
             std::atomic_bool _rendererReady;
             QVector2D _discardsToLoad;
             QVector3D _whiteTimeDeltasToLoad;
+            QRectF _clearArea;
+            QRectF _paintArea;
     };
 }

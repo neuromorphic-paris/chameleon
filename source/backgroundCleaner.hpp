@@ -24,7 +24,11 @@ namespace chameleon {
                 _programSetup(false)
             {
             }
-            ~BackgroundCleanerRenderer() {}
+            BackgroundCleanerRenderer(const BackgroundCleanerRenderer&) = delete;
+            BackgroundCleanerRenderer(BackgroundCleanerRenderer&&) = default;
+            BackgroundCleanerRenderer& operator=(const BackgroundCleanerRenderer&) = delete;
+            BackgroundCleanerRenderer& operator=(BackgroundCleanerRenderer&&) = default;
+            virtual ~BackgroundCleanerRenderer() {}
 
             /// setRenderingArea defines the rendering area.
             virtual void setRenderingArea(QRect renderingArea, int windowHeight) {
@@ -75,6 +79,11 @@ namespace chameleon {
             {
                 connect(this, &QQuickItem::windowChanged, this, &BackgroundCleaner::handleWindowChanged);
             }
+            BackgroundCleaner(const BackgroundCleaner&) = delete;
+            BackgroundCleaner(BackgroundCleaner&&) = default;
+            BackgroundCleaner& operator=(const BackgroundCleaner&) = delete;
+            BackgroundCleaner& operator=(BackgroundCleaner&&) = default;
+            virtual ~BackgroundCleaner() {}
 
             /// setColor defines the clear color.
             /// The color will be passed to the openGL renderer, therefore it should only be set once.
