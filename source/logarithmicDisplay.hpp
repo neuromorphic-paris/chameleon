@@ -94,7 +94,7 @@ namespace chameleon {
             /// push adds an event to the display.
             template<typename Event>
             void push(Event event) {
-                const auto index = static_cast<std::size_t>(event.x) + static_cast<std::size_t>(_canvasSize.height() - 1 - event.y) * _canvasSize.width();
+                const auto index = static_cast<std::size_t>(event.x) + static_cast<std::size_t>(event.y) * _canvasSize.width();
                 while (_accessingTimeDeltas.test_and_set(std::memory_order_acquire)) {}
                 _timeDeltas[index] = static_cast<float>(event.timeDelta);
                 _accessingTimeDeltas.clear(std::memory_order_release);

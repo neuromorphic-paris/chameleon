@@ -71,9 +71,7 @@ namespace chameleon {
             /// push adds an event to the display.
             template<typename Event>
             void push(Event event) {
-                const auto index = (
-                    static_cast<std::size_t>(event.x) + static_cast<std::size_t>(_canvasSize.height() - 1 - event.y) * _canvasSize.width()
-                ) * 2;
+                const auto index = (static_cast<std::size_t>(event.x) + static_cast<std::size_t>(event.y) * _canvasSize.width()) * 2;
                 while (_accessingTimestampsAndAreIncreases.test_and_set(std::memory_order_acquire)) {}
                 _timestampsAndAreIncreases[index] = static_cast<float>(event.timestamp);
                 _timestampsAndAreIncreases[index + 1] = event.isIncrease ? 1.0 : 0.0;
