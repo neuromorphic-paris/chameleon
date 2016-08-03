@@ -35,3 +35,7 @@ To test the library, run the following commands:
 # User guides and documentation
 
 Code documentation is held in the [wiki](https://github.com/neuromorphic-paris/chameleon/wiki).
+
+# License
+
+See the [LICENSE](LICENSE.md) file for license rights and limitations (MIT).
