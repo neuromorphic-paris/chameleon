@@ -5,8 +5,7 @@
 #include <atomic>
 #include <unordered_map>
 #include <array>
-
-#include <iostream> // @DEBUG
+#include <cmath>
 
 /// chameleon provides Qt components for event stream display.
 namespace chameleon {
@@ -18,10 +17,12 @@ namespace chameleon {
         Q_PROPERTY(QColor strokeColor READ strokeColor WRITE setStrokeColor)
         Q_PROPERTY(qreal strokeThickness READ strokeThickness WRITE setStrokeThickness)
         Q_PROPERTY(QColor fillColor READ fillColor WRITE setFillColor)
+        Q_PROPERTY(qreal confidence READ confidence WRITE setConfidence)
         public:
             BlobDisplay(QQuickItem* parent = nullptr) :
                 QQuickPaintedItem(parent),
-                _brush(Qt::transparent, Qt::SolidPattern)
+                _brush(Qt::transparent, Qt::SolidPattern),
+                _confidence(1.96)
             {
                 _accessingBlobs.clear(std::memory_order_release);
             }
@@ -69,6 +70,16 @@ namespace chameleon {
             /// fillColor returns the currently used fill color.
             virtual QColor fillColor() const {
                 return _brush.color();
+            }
+
+            /// setConfidence defines the confidence level for gaussian representation.
+            virtual void setConfidence(qreal confidence) {
+                _confidence = confidence;
+            }
+
+            /// confidence returns the currently used confidence level.
+            virtual qreal confidence() const {
+                return _confidence;
             }
 
             /// promoteBlob adds a blob to the display or shows a hidden blob.
@@ -142,8 +153,8 @@ namespace chameleon {
                         painter->resetTransform();
                         painter->setWindow(0, 0, _canvasSize.width(), _canvasSize.height());
                         painter->translate(idAndBlobAndIsVisible.second.first.x, _canvasSize.height() - 1 - idAndBlobAndIsVisible.second.first.y);
-                        const auto ellipse = ellipseFromBlob(idAndBlobAndIsVisible.second.first);
-                        painter->rotate(std::get<2>(ellipse));
+                        const auto ellipse = ellipseFromBlob(idAndBlobAndIsVisible.second.first, _confidence);
+                        painter->rotate(std::get<2>(ellipse) / M_PI * 180);
                         painter->drawEllipse(QPointF(), std::get<0>(ellipse), std::get<1>(ellipse));
                     }
                 }
@@ -166,19 +177,20 @@ namespace chameleon {
             ///     - a is the major radius
             ///     - b is the minor radius
             ///     - angle is the angle between the horizontal axis and the major axis
-            std::array<double, 3> ellipseFromBlob(const ProtectedBlob& blob) {
-                const auto deltaSquareRoot = std::sqrt(std::pow(blob.squaredSigmaY - blob.squaredSigmaX, 2) + 4 * std::pow(blob.sigmaXY, 2)) / 2;
-                const auto firstOrderCoefficient = blob.squaredSigmaY + blob.squaredSigmaX / 2;
+            std::array<double, 3> ellipseFromBlob(const ProtectedBlob& blob, double confidence) {
+                const auto deltaSquareRoot = std::sqrt(std::pow(blob.squaredSigmaX - blob.squaredSigmaY, 2) + 4 * std::pow(blob.sigmaXY, 2)) / 2;
+                const auto firstOrderCoefficient = (blob.squaredSigmaX + blob.squaredSigmaY) / 2;
                 return std::array<double, 3>{{
-                    firstOrderCoefficient + deltaSquareRoot,
-                    firstOrderCoefficient - deltaSquareRoot,
-                    std::atan(2 * blob.sigmaXY / (blob.squaredSigmaY - blob.squaredSigmaX)) / 2,
+                    confidence * std::sqrt(firstOrderCoefficient + deltaSquareRoot),
+                    confidence * std::sqrt(firstOrderCoefficient - deltaSquareRoot),
+                    blob.squaredSigmaY == blob.squaredSigmaX ? 0 : std::atan(2 * blob.sigmaXY / (blob.squaredSigmaY - blob.squaredSigmaX)) / 2,
                 }};
             }
 
             QSize _canvasSize;
             QPen _pen;
             QBrush _brush;
+            qreal _confidence;
             std::unordered_map<std::size_t, std::pair<ProtectedBlob, bool>> _blobAndIsVisibleById;
             std::atomic_flag _accessingBlobs;
     };
