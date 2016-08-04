@@ -10,7 +10,7 @@
 /// chameleon provides Qt components for event stream display.
 namespace chameleon {
 
-    /// BlobDisplay displays gausian blobs as ellipses.
+    /// BlobDisplay displays gaussian blobs as ellipses.
     class BlobDisplay : public QQuickPaintedItem {
         Q_OBJECT
         Q_PROPERTY(QSize canvasSize READ canvasSize WRITE setCanvasSize)
