@@ -410,6 +410,8 @@ namespace chameleon {
                 if (!_canvasSizeSet.load(std::memory_order_relaxed)) {
                     _canvasSize = canvasSize;
                     _canvasSizeSet.store(true, std::memory_order_release);
+                    setImplicitWidth(canvasSize.width());
+                    setImplicitHeight(canvasSize.height());
                 }
             }
 
