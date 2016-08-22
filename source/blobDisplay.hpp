@@ -154,7 +154,7 @@ namespace chameleon {
                         painter->setWindow(0, 0, _canvasSize.width(), _canvasSize.height());
                         painter->translate(idAndBlobAndIsVisible.second.first.x, _canvasSize.height() - 1 - idAndBlobAndIsVisible.second.first.y);
                         const auto ellipse = ellipseFromBlob(idAndBlobAndIsVisible.second.first, _confidence);
-                        painter->rotate(std::get<2>(ellipse) / M_PI * 180);
+                        painter->rotate(-std::get<2>(ellipse) / M_PI * 180);
                         painter->drawEllipse(QPointF(), std::get<0>(ellipse), std::get<1>(ellipse));
                     }
                 }
@@ -183,7 +183,11 @@ namespace chameleon {
                 return std::array<double, 3>{{
                     confidence * std::sqrt(firstOrderCoefficient + deltaSquareRoot),
                     confidence * std::sqrt(firstOrderCoefficient - deltaSquareRoot),
-                    blob.squaredSigmaY == blob.squaredSigmaX ? 0 : std::atan(2 * blob.sigmaXY / (blob.squaredSigmaY - blob.squaredSigmaX)) / 2,
+                    blob.squaredSigmaY == blob.squaredSigmaX ? M_PI / 4
+                    : (
+                        std::atan(2 * blob.sigmaXY / (blob.squaredSigmaX - blob.squaredSigmaY))
+                        + (blob.squaredSigmaY > blob.squaredSigmaX ? M_PI : 0)
+                    ) / 2,
                 }};
             }
 
