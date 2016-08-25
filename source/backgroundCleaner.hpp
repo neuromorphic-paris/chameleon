@@ -7,10 +7,7 @@
 #include <QtGui/QOpenGLContext>
 
 #include <memory>
-#include <stdexcept>
 #include <atomic>
-#include <algorithm>
-#include <limits>
 
 /// chameleon provides Qt components for event stream display.
 namespace chameleon {
