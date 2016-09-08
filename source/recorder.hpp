@@ -10,8 +10,6 @@
 #include <atomic>
 #include <condition_variable>
 
-#include <iostream> // @DEBUG
-
 /// chameleon provides Qt components for event stream display.
 namespace chameleon {
 
@@ -177,14 +175,9 @@ namespace chameleon {
             virtual void push(int64_t timestamp) {
                 while (_accessingSettings.test_and_set(std::memory_order_acquire)) {}
                 if (_intervalSet && _directorySet && _initialTimestampSet && timestamp >= _previousShotTimestamp + static_cast<int64_t>(_interval)) {
-
-                    std::cout << "Will render for timestamp " << timestamp << std::endl; // @DEBUG
-
-                    _recorderRenderer->writeTo(_directory + QString::number(_shotIndex) + QString(".png"));
+                    _recorderRenderer->writeTo(_directory + "/" + QString::number(_shotIndex) + QString(".png"));
                     ++_shotIndex;
                     _previousShotTimestamp = timestamp;
-
-                    std::cout << "    Render done" << std::endl; // @DEBUG
                 }
                 _accessingSettings.clear(std::memory_order_release);
             }
@@ -216,6 +209,13 @@ namespace chameleon {
             /// cleanup resets the renderer.
             void cleanup() {
                 _recorderRenderer.reset();
+            }
+
+            /// triggerDraw triggers a draw.
+            void triggerDraw() {
+                if (window()) {
+                    window()->update();
+                }
             }
 
         private slots:
