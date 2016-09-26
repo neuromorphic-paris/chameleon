@@ -257,6 +257,7 @@ namespace chameleon {
                     // Calculate the discards if automatic calibration is enabled (both discards are zero)
                     while (_accessingDiscards.test_and_set(std::memory_order_acquire)) {}
                     if (_automaticCalibration) {
+                        auto previousDiscards = _discards;
                         auto sortedTimeDeltas = std::vector<float>();
                         sortedTimeDeltas.reserve(_duplicatedTimeDeltas.size());
                         for (auto&& timeDelta : _duplicatedTimeDeltas) {
@@ -284,6 +285,9 @@ namespace chameleon {
                                 _discards.setX(blackDiscardCandidate);
                                 _discards.setY(whiteDiscardCandidate);
                             }
+                        }
+                        if (previousDiscards != _discards) {
+                            _discardsChanged = true;
                         }
                     }
                     if (_discardsChanged) {
@@ -378,7 +382,7 @@ namespace chameleon {
     class LogarithmicDisplay : public QQuickItem {
         Q_OBJECT
         Q_PROPERTY(QSize canvasSize READ canvasSize WRITE setCanvasSize)
-        Q_PROPERTY(QVector2D discards READ discards WRITE setDiscards)
+        Q_PROPERTY(QVector2D discards READ discards WRITE setDiscards NOTIFY discardsChanged)
         Q_PROPERTY(float discardRatio READ discardRatio WRITE setDiscardRatio)
         Q_PROPERTY(Colormap colormap READ colormap WRITE setColormap)
         Q_PROPERTY(QRectF paintArea READ paintArea)
