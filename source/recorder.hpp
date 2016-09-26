@@ -20,7 +20,8 @@ namespace chameleon {
             RecorderRenderer() :
                 _programSetup(false),
                 _renderingRequired(false),
-                _beforeRenderingDone(false)
+                _beforeRenderingDone(false),
+                _closing(false)
             {
             }
             RecorderRenderer(const RecorderRenderer&) = delete;
@@ -40,13 +41,15 @@ namespace chameleon {
                 _renderingRequired.store(true, std::memory_order_release);
                 auto lock = std::unique_lock<std::mutex>(_pixelsMutex);
                 _pixelsUpdated.wait(lock);
-                QImage(
-                    _pixels.data(),
-                    _imageWidth,
-                    _imageHeight,
-                    4 * _imageWidth,
-                    QImage::Format_RGBA8888_Premultiplied
-                ).mirrored().save(filename);
+                if (!_closing) {
+                    QImage(
+                        _pixels.data(),
+                        _imageWidth,
+                        _imageHeight,
+                        4 * _imageWidth,
+                        QImage::Format_RGBA8888_Premultiplied
+                    ).mirrored().save(filename);
+                }
                 lock.unlock();
             }
 
@@ -71,10 +74,8 @@ namespace chameleon {
                 } else {
                     if (_beforeRenderingDone) {
                         _beforeRenderingDone = false;
-
                         glUseProgram(_programId);
                         glEnable(GL_SCISSOR_TEST);
-
                         {
                             const std::lock_guard<std::mutex> lock(_pixelsMutex);
                             _pixels.reserve(_recordArea.width() * _recordArea.height() * 4);
@@ -96,6 +97,15 @@ namespace chameleon {
                 }
             }
 
+            /// closing is called when the window is about to be closed.
+            void closing() {
+                {
+                    const std::lock_guard<std::mutex> lock(_pixelsMutex);
+                    _closing = true;
+                }
+                _pixelsUpdated.notify_one();
+            }
+
         protected:
             QRect _recordArea;
             bool _programSetup;
@@ -107,6 +117,7 @@ namespace chameleon {
             std::condition_variable _pixelsUpdated;
             std::size_t _imageWidth;
             std::size_t _imageHeight;
+            bool _closing;
     };
 
     /// Recorder takes screenshots of the window.
@@ -119,7 +130,8 @@ namespace chameleon {
             Recorder() :
                 _intervalSet(false),
                 _directorySet(false),
-                _shotIndex(0)
+                _shotIndex(0),
+                _closing(false)
             {
                 connect(this, &QQuickItem::windowChanged, this, &Recorder::handleWindowChanged);
                 _accessingSettings.clear(std::memory_order_release);
@@ -175,12 +187,23 @@ namespace chameleon {
             virtual void push(int64_t timestamp) {
                 while (_accessingSettings.test_and_set(std::memory_order_acquire)) {}
                 if (_intervalSet && _directorySet && _initialTimestampSet && timestamp >= _previousShotTimestamp + static_cast<int64_t>(_interval)) {
-                    _recorderRenderer->writeTo(_directory + "/" + QString::number(_shotIndex) + QString(".png"));
-                    ++_shotIndex;
-                    _previousShotTimestamp = timestamp;
+                    auto lock = std::unique_lock<std::mutex>(_renderMutex);
+                    if (!_closing) {
+                        _recorderRenderer->writeTo(_directory + "/" + QString::number(_shotIndex) + QString(".png"));
+                        rendered(static_cast<unsigned int>(_shotIndex), static_cast<int>(timestamp));
+                        _previousShotTimestamp = timestamp;
+                        ++_shotIndex;
+                        _renderAcknowledged.wait(lock);
+                    }
+                    lock.unlock();
                 }
                 _accessingSettings.clear(std::memory_order_release);
             }
+
+        signals:
+
+            /// rendered notifies a successful image save.
+            void rendered(unsigned int shotIndex, int timestamp);
 
         public slots:
 
@@ -188,6 +211,20 @@ namespace chameleon {
             void sync() {
                 if (!_recorderRenderer) {
                     _recorderRenderer = std::unique_ptr<RecorderRenderer>(new RecorderRenderer());
+                    connect(
+                        window(),
+                        SIGNAL(closing(QQuickCloseEvent*)),
+                        _recorderRenderer.get(),
+                        SLOT(closing()),
+                        Qt::DirectConnection
+                    );
+                    connect(
+                        window(),
+                        SIGNAL(closing(QQuickCloseEvent*)),
+                        this,
+                        SLOT(closing()),
+                        Qt::DirectConnection
+                    );
                     connect(
                         window(),
                         &QQuickWindow::beforeRendering,
@@ -218,6 +255,23 @@ namespace chameleon {
                 }
             }
 
+            /// acknowledgeRender resumes the event handling after a successful render.
+            void acknowledgeRender() {
+                {
+                    const std::lock_guard<std::mutex> lock(_renderMutex);
+                }
+                _renderAcknowledged.notify_one();
+            }
+
+            /// closing is called when the window is about to be closed.
+            void closing() {
+                {
+                    const std::lock_guard<std::mutex> lock(_renderMutex);
+                    _closing = true;
+                }
+                _renderAcknowledged.notify_one();
+            }
+
         private slots:
 
             /// handleWindowChanged is triggered after a window change.
@@ -240,5 +294,8 @@ namespace chameleon {
             int64_t _previousShotTimestamp;
             std::size_t _shotIndex;
             std::unique_ptr<RecorderRenderer> _recorderRenderer;
+            std::mutex _renderMutex;
+            std::condition_variable _renderAcknowledged;
+            bool _closing;
     };
 }
