@@ -55,7 +55,7 @@ namespace chameleon {
 
         public slots:
 
-            /// beforeRenderingCallback is called when a rendering starts.
+            /// beforeRenderingCallback must be called when a rendering starts.
             void beforeRenderingCallback() {
                 if (_renderingRequired.load(std::memory_order_acquire)) {
                     _renderingRequired.store(false, std::memory_order_release);

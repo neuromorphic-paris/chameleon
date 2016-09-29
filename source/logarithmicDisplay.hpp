@@ -492,7 +492,7 @@ namespace chameleon {
 
         public slots:
 
-            /// sync addapts the renderer to external changes.
+            /// sync adapts the renderer to external changes.
             void sync() {
                 if (
                     _canvasSizeSet.load(std::memory_order_acquire)
@@ -567,7 +567,7 @@ namespace chameleon {
 
         private slots:
 
-            /// handleWindowChanged is triggered after a window transformation.
+            /// handleWindowChanged must be triggered after a window transformation.
             void handleWindowChanged(QQuickWindow* window) {
                 if (window) {
                     connect(window, &QQuickWindow::beforeSynchronizing, this, &LogarithmicDisplay::sync, Qt::DirectConnection);
