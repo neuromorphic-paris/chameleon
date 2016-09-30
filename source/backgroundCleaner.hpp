@@ -7,10 +7,7 @@
 #include <QtGui/QOpenGLContext>
 
 #include <memory>
-#include <stdexcept>
 #include <atomic>
-#include <algorithm>
-#include <limits>
 
 /// chameleon provides Qt components for event stream display.
 namespace chameleon {
@@ -101,7 +98,7 @@ namespace chameleon {
 
         public slots:
 
-            /// sync addapts the renderer to external changes.
+            /// sync adapts the renderer to external changes.
             void sync() {
                 if (_colorSet.load(std::memory_order_acquire)) {
                     if (!_backgroundCleanerRenderer) {
@@ -134,7 +131,7 @@ namespace chameleon {
 
         private slots:
 
-            /// handleWindowChanged is triggered after a window change.
+            /// handleWindowChanged must be triggered after a window change.
             void handleWindowChanged(QQuickWindow* window) {
                 if (window) {
                     connect(window, &QQuickWindow::beforeSynchronizing, this, &BackgroundCleaner::sync, Qt::DirectConnection);

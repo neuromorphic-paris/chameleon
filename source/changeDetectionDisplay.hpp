@@ -106,10 +106,14 @@ namespace chameleon {
                             "        0.0,"
                             "        1.0"
                             "    );"
-                            "    if (timestampAndIsIncrease.y > 0.5) {"
-                            "        exposure = 0.5 * exp(-(currentTimestamp - timestampAndIsIncrease.x) / decay) + 0.5;"
+                            "    if (timestampAndIsIncrease.x > currentTimestamp) {"
+                            "        exposure = 0.5;"
                             "    } else {"
-                            "        exposure = 0.5 - 0.5 * exp(-(currentTimestamp - timestampAndIsIncrease.x) / float(decay));"
+                            "        if (timestampAndIsIncrease.y > 0.5) {"
+                            "            exposure = 0.5 * exp(-(currentTimestamp - timestampAndIsIncrease.x) / decay) + 0.5;"
+                            "        } else {"
+                            "            exposure = 0.5 - 0.5 * exp(-(currentTimestamp - timestampAndIsIncrease.x) / float(decay));"
+                            "        }"
                             "    }"
                             "}"
                         );
@@ -363,7 +367,7 @@ namespace chameleon {
 
         public slots:
 
-            /// sync addapts the renderer to external changes.
+            /// sync adapts the renderer to external changes.
             void sync() {
                 if (
                     _canvasSizeSet.load(std::memory_order_acquire)
@@ -421,7 +425,7 @@ namespace chameleon {
 
         private slots:
 
-            /// handleWindowChanged is triggered after a window change.
+            /// handleWindowChanged must be triggered after a window change.
             void handleWindowChanged(QQuickWindow* window) {
                 if (window) {
                     connect(window, &QQuickWindow::beforeSynchronizing, this, &ChangeDetectionDisplay::sync, Qt::DirectConnection);
