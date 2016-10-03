@@ -159,7 +159,6 @@ namespace chameleon {
             virtual void setDirectory(QString directory) {
                 while (_accessingSettings.test_and_set(std::memory_order_acquire)) {}
                 _directory = directory;
-                _directorySet = true;
                 _accessingSettings.clear(std::memory_order_release);
             }
 
@@ -186,7 +185,12 @@ namespace chameleon {
             /// push must be called before pushing the associated event to the other displays.
             virtual void push(int64_t timestamp) {
                 while (_accessingSettings.test_and_set(std::memory_order_acquire)) {}
-                if (_intervalSet && _directorySet && _initialTimestampSet && timestamp >= _previousShotTimestamp + static_cast<int64_t>(_interval)) {
+                if (
+                    _intervalSet
+                    && !_directory.isEmpty()
+                    && _initialTimestampSet
+                    && timestamp >= _previousShotTimestamp + static_cast<int64_t>(_interval)
+                ) {
                     auto lock = std::unique_lock<std::mutex>(_renderMutex);
                     if (!_closing) {
                         _recorderRenderer->writeTo(_directory + "/" + QString::number(_shotIndex) + QString(".png"));
@@ -287,7 +291,6 @@ namespace chameleon {
             uint64_t _interval;
             bool _intervalSet;
             QString _directory;
-            bool _directorySet;
             int _initialTimestamp;
             bool _initialTimestampSet;
             std::atomic_flag _accessingSettings;
