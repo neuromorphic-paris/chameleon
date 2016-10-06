@@ -17,7 +17,7 @@ Chameleon relies on [Premake 4.x](https://github.com/premake/premake-4.x) (x ≥
 
 Chameleon also depends on Qt 5.x (x ≥ 3), which is a framework to create user interfaces. Follow these steps:
 
-  - __Debian / Ubuntu__: Open a terminal and execute the command `sudo apt-get install qtbase5-dev`.
+  - __Debian / Ubuntu__: Open a terminal and execute the command `sudo apt-get install qtbase5-dev qtdeclarative5-dev`.
   - __Fedora__: Open a terminal and execute the command `sudo dnf install qt5-qtbase-devel qt5-qtdeclarative-devel`.
   - __OS X__: Open a terminal and execute the command `brew install qt5`.
 
