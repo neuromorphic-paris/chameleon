@@ -405,7 +405,7 @@ namespace chameleon {
                             _paintArea.moveLeft(clearArea.left());
                             _paintArea.moveTop(clearArea.top() + (clearArea.height() - _paintArea.height()) / 2);
                         }
-                        _changeDetectionDisplayRenderer->setRenderingArea(_clearArea, _paintArea, window()->height());
+                        _changeDetectionDisplayRenderer->setRenderingArea(_clearArea, _paintArea, window()->height() * window()->devicePixelRatio());
                         paintAreaChanged(_paintArea);
                     }
                 }
