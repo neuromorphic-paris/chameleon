@@ -113,7 +113,15 @@ namespace chameleon {
                             Qt::DirectConnection
                         );
                     }
-                    _backgroundCleanerRenderer->setRenderingArea(QRect(x(), y(), width(), height()), window()->height());
+                    _backgroundCleanerRenderer->setRenderingArea(
+                        QRect(
+                            x() * window()->devicePixelRatio(),
+                            y() * window()->devicePixelRatio(),
+                            width() * window()->devicePixelRatio(),
+                            height() * window()->devicePixelRatio()
+                        ),
+                        window()->height() * window()->devicePixelRatio()
+                    );
                 }
             }
 
