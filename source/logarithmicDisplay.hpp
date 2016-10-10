@@ -521,10 +521,10 @@ namespace chameleon {
                         _rendererReady.store(true, std::memory_order_release);
                         _accessingRenderer.clear(std::memory_order_release);
                     }
-                    auto clearArea = QRectF(0, 0, width(), height());
+                    auto clearArea = QRectF(0, 0, width() * window()->devicePixelRatio(), height() * window()->devicePixelRatio());
                     for (auto item = static_cast<QQuickItem*>(this); item; item = item->parentItem()) {
-                        clearArea.moveLeft(clearArea.left() + item->x());
-                        clearArea.moveTop(clearArea.top() + item->y());
+                        clearArea.moveLeft(clearArea.left() + item->x() * window()->devicePixelRatio());
+                        clearArea.moveTop(clearArea.top() + item->y() * window()->devicePixelRatio());
                     }
                     if (clearArea != _clearArea) {
                         _clearArea = std::move(clearArea);
@@ -539,7 +539,7 @@ namespace chameleon {
                             _paintArea.moveLeft(clearArea.left());
                             _paintArea.moveTop(clearArea.top() + (clearArea.height() - _paintArea.height()) / 2);
                         }
-                        _logarithmicDisplayRenderer->setRenderingArea(_clearArea, _paintArea, window()->height());
+                        _logarithmicDisplayRenderer->setRenderingArea(_clearArea, _paintArea, window()->height() * window()->devicePixelRatio());
                         paintAreaChanged(_paintArea);
                     }
                 }
