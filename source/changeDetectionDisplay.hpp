@@ -387,10 +387,10 @@ namespace chameleon {
                         );
                         _rendererReady.store(true, std::memory_order_release);
                     }
-                    auto clearArea = QRectF(0, 0, width(), height());
+                    auto clearArea = QRectF(0, 0, width() * window()->devicePixelRatio(), height() * window()->devicePixelRatio());
                     for (auto item = static_cast<QQuickItem*>(this); item; item = item->parentItem()) {
-                        clearArea.moveLeft(clearArea.left() + item->x());
-                        clearArea.moveTop(clearArea.top() + item->y());
+                        clearArea.moveLeft(clearArea.left() + item->x() * window()->devicePixelRatio());
+                        clearArea.moveTop(clearArea.top() + item->y() * window()->devicePixelRatio());
                     }
                     if (clearArea != _clearArea) {
                         _clearArea = std::move(clearArea);
