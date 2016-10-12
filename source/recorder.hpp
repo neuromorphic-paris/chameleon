@@ -5,10 +5,12 @@
 #include <QtQuick/QQuickItem>
 #include <QtGui/QOpenGLContext>
 #include <QImage>
+#include <QDir>
 
 #include <memory>
 #include <atomic>
 #include <condition_variable>
+#include <stdexcept>
 
 /// chameleon provides Qt components for event stream display.
 namespace chameleon {
@@ -129,7 +131,7 @@ namespace chameleon {
         public:
             Recorder() :
                 _intervalSet(false),
-                _directorySet(false),
+                _initialTimestampSet(false),
                 _shotIndex(0),
                 _closing(false)
             {
@@ -157,6 +159,9 @@ namespace chameleon {
 
             /// setDirectory defines the directory for saving the screenshots.
             virtual void setDirectory(QString directory) {
+                if (!QDir::root().mkpath(directory)) {
+                    throw std::runtime_error("The directory " + directory.toStdString() + " does not exist and could not be created");
+                }
                 while (_accessingSettings.test_and_set(std::memory_order_acquire)) {}
                 _directory = directory;
                 _accessingSettings.clear(std::memory_order_release);
@@ -186,10 +191,10 @@ namespace chameleon {
             virtual void push(int64_t timestamp) {
                 while (_accessingSettings.test_and_set(std::memory_order_acquire)) {}
                 if (
-                    _intervalSet
-                    && !_directory.isEmpty()
+                    timestamp >= _previousShotTimestamp + static_cast<int64_t>(_interval)
+                    && _intervalSet
                     && _initialTimestampSet
-                    && timestamp >= _previousShotTimestamp + static_cast<int64_t>(_interval)
+                    && !_directory.isEmpty()
                 ) {
                     auto lock = std::unique_lock<std::mutex>(_renderMutex);
                     if (!_closing) {
