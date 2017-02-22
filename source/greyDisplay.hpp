@@ -18,14 +18,15 @@
 /// chameleon provides Qt components for event stream display.
 namespace chameleon {
 
-    /// ColorDisplayRenderer handles openGL calls for a ColorDisplay.
-    class ColorDisplayRenderer : public QObject, public QOpenGLFunctions {
+    /// GreyDisplayRenderer handles openGL calls for a GreyDisplay.
+    class GreyDisplayRenderer : public QObject, public QOpenGLFunctions {
         Q_OBJECT
         public:
-            ColorDisplayRenderer(const QSize& canvasSize, const QColor& backgroundColor):
+            GreyDisplayRenderer(const QSize& canvasSize, const QColor& backgroundColor):
                 _canvasSize(canvasSize),
-                _colors(_canvasSize.width() * _canvasSize.height() * 3, 0),
-                _duplicatedColors(_canvasSize.width() * _canvasSize.height() * 3),
+                _backgroundColor(backgroundColor),
+                _exposures(_canvasSize.width() * _canvasSize.height(), 0),
+                _duplicatedExposures(_canvasSize.width() * _canvasSize.height()),
                 _programSetup(false)
             {
                 _indices.reserve(static_cast<std::size_t>(
@@ -52,14 +53,15 @@ namespace chameleon {
                         _coordinates.push_back(static_cast<float>(y));
                     }
                 }
-                _accessingColors.clear(std::memory_order_release);
+                _accessingExposures.clear(std::memory_order_release);
             }
-            ColorDisplayRenderer(const ColorDisplayRenderer&) = delete;
-            ColorDisplayRenderer(ColorDisplayRenderer&&) = default;
-            ColorDisplayRenderer& operator=(const ColorDisplayRenderer&) = delete;
-            ColorDisplayRenderer& operator=(ColorDisplayRenderer&&) = default;
-            virtual ~ColorDisplayRenderer() {}
+            GreyDisplayRenderer(const GreyDisplayRenderer&) = delete;
+            GreyDisplayRenderer(GreyDisplayRenderer&&) = default;
+            GreyDisplayRenderer& operator=(const GreyDisplayRenderer&) = delete;
+            GreyDisplayRenderer& operator=(GreyDisplayRenderer&&) = default;
+            virtual ~GreyDisplayRenderer() {}
 
+            /// setRenderingArea defines the rendering area.
             virtual void setRenderingArea(const QRectF& clearArea, const QRectF& paintArea, const int& windowHeight) {
                 _clearArea = clearArea;
                 _clearArea.moveTop(windowHeight - _clearArea.top() - _clearArea.height());
@@ -70,12 +72,10 @@ namespace chameleon {
             /// push adds an event to the display.
             template<typename Event>
             void push(Event event) {
-                const auto index = (static_cast<std::size_t>(event.x) + static_cast<std::size_t>(event.y) * _canvasSize.width()) * 3;
-                while (_accessingColors.test_and_set(std::memory_order_acquire)) {}
-                _colors[index] = static_cast<float>(event.r);
-                _colors[index + 1] = static_cast<float>(event.g);
-                _colors[index + 2] = static_cast<float>(event.b);
-                _accessingColors.clear(std::memory_order_release);
+                const auto index = static_cast<std::size_t>(event.x) + static_cast<std::size_t>(event.y) * _canvasSize.width();
+                while (_accessingExposures.test_and_set(std::memory_order_acquire)) {}
+                _exposures[index] = static_cast<float>(event.exposure);
+                _accessingExposures.clear(std::memory_order_release);
             }
 
         public slots:
@@ -92,8 +92,8 @@ namespace chameleon {
                         const auto vertexShader = std::string(
                             "#version 120\n"
                             "attribute vec2 coordinates;"
-                            "attribute vec3 color;"
-                            "varying vec3 fragmentColor;"
+                            "attribute float exposure;"
+                            "varying float fragmentExposure;"
                             "uniform float width;"
                             "uniform float height;"
                             "void main() {"
@@ -103,7 +103,7 @@ namespace chameleon {
                             "        0.0,"
                             "        1.0"
                             "    );"
-                            "    fragmentColor = color;"
+                            "    fragmentExposure = exposure;"
                             "}"
                         );
                         auto vertexShaderContent = vertexShader.c_str();
@@ -123,9 +123,9 @@ namespace chameleon {
                     {
                         auto fragmentShader = std::string(
                             "#version 120\n"
-                            "varying vec3 fragmentColor;"
+                            "varying float fragmentExposure;"
                             "void main() {"
-                            "    gl_FragColor = vec4(fragmentColor, 1.0);"
+                            "    gl_FragColor = vec4(fragmentExposure, fragmentExposure, fragmentExposure, 1.0);"
                             "}"
                         );
                         auto fragmentShaderContent = fragmentShader.c_str();
@@ -147,7 +147,7 @@ namespace chameleon {
                     glLinkProgram(_programId);
                     glUseProgram(_programId);
                     _coordinatesLocation = glGetAttribLocation(_programId, "coordinates");
-                    _colorLocation = glGetAttribLocation(_programId, "color");
+                    _exposureLocation = glGetAttribLocation(_programId, "exposure");
                     glDeleteShader(vertexShaderId);
                     glDeleteShader(fragmentShaderId);
                     checkProgramError(_programId);
@@ -162,9 +162,9 @@ namespace chameleon {
                 } else {
 
                     // Copy the events to minimise the strain on the event pipeline
-                    while (_accessingColors.test_and_set(std::memory_order_acquire)) {}
-                    std::copy(_colors.begin(), _colors.end(), _duplicatedColors.begin());
-                    _accessingColors.clear(std::memory_order_release);
+                    while (_accessingExposures.test_and_set(std::memory_order_acquire)) {}
+                    std::copy(_exposures.begin(), _exposures.end(), _duplicatedExposures.begin());
+                    _accessingExposures.clear(std::memory_order_release);
 
                     // Resize the rendering area
                     glUseProgram(_programId);
@@ -199,9 +199,9 @@ namespace chameleon {
 
                     // Send varying data to the GPU
                     glEnableVertexAttribArray(_coordinatesLocation);
-                    glEnableVertexAttribArray(_colorLocation);
+                    glEnableVertexAttribArray(_exposureLocation);
                     glVertexAttribPointer(_coordinatesLocation, 2, GL_FLOAT, GL_FALSE, 0, _coordinates.data());
-                    glVertexAttribPointer(_colorLocation, 3, GL_FLOAT, GL_FALSE, 0, _duplicatedColors.data());
+                    glVertexAttribPointer(_exposureLocation, 1, GL_FLOAT, GL_FALSE, 0, _duplicatedExposures.data());
                     glDrawElements(GL_TRIANGLE_STRIP, _indices.size(),  GL_UNSIGNED_INT, _indices.data());
                     glDisable(GL_SCISSOR_TEST);
                 }
@@ -257,37 +257,37 @@ namespace chameleon {
             QColor _backgroundColor;
             std::vector<GLuint> _indices;
             std::vector<float> _coordinates;
-            std::vector<float> _colors;
-            std::vector<float> _duplicatedColors;
-            std::atomic_flag _accessingColors;
+            std::vector<float> _exposures;
+            std::vector<float> _duplicatedExposures;
+            std::atomic_flag _accessingExposures;
             QRectF _clearArea;
             QRectF _paintArea;
             GLuint _programId;
             bool _programSetup;
             GLuint _coordinatesLocation;
-            GLuint _colorLocation;
+            GLuint _exposureLocation;
     };
 
-    /// ColorDisplay displays a stream of color events without tone-mapping.
-    class ColorDisplay : public QQuickItem {
+    /// GreyDisplay displays a stream of events without tone-mapping.
+    class GreyDisplay : public QQuickItem {
         Q_OBJECT
         Q_INTERFACES(QQmlParserStatus)
         Q_PROPERTY(QSize canvasSize READ canvasSize WRITE setCanvasSize)
         Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor)
         Q_PROPERTY(QRectF paintArea READ paintArea)
         public:
-            ColorDisplay() :
+            GreyDisplay() :
                 _ready(false),
                 _rendererReady(false),
                 _backgroundColor(Qt::black)
             {
-                connect(this, &QQuickItem::windowChanged, this, &ColorDisplay::handleWindowChanged);
+                connect(this, &QQuickItem::windowChanged, this, &GreyDisplay::handleWindowChanged);
             }
-            ColorDisplay(const ColorDisplay&) = delete;
-            ColorDisplay(ColorDisplay&&) = default;
-            ColorDisplay& operator=(const ColorDisplay&) = delete;
-            ColorDisplay& operator=(ColorDisplay&&) = default;
-            virtual ~ColorDisplay() {}
+            GreyDisplay(const GreyDisplay&) = delete;
+            GreyDisplay(GreyDisplay&&) = default;
+            GreyDisplay& operator=(const GreyDisplay&) = delete;
+            GreyDisplay& operator=(GreyDisplay&&) = default;
+            virtual ~GreyDisplay() {}
 
             /// setCanvasSize defines the display coordinates.
             /// The canvas size will be passed to the openGL renderer, therefore it should only be set during qml construction.
@@ -328,7 +328,7 @@ namespace chameleon {
             template<typename Event>
             void push(Event event) {
                 if (_rendererReady.load(std::memory_order_relaxed)) {
-                    _colorDisplayRenderer->push<Event>(event);
+                    _greyDisplayRenderer->push<Event>(event);
                 }
             }
 
@@ -389,7 +389,7 @@ namespace chameleon {
 
             /// cleanup resets the renderer.
             void cleanup() {
-                _colorDisplayRenderer.reset();
+                _greyDisplayRenderer.reset();
             }
 
             /// triggerDraw triggers a draw.
@@ -404,8 +404,8 @@ namespace chameleon {
             /// handleWindowChanged must be triggered after a window transformation.
             void handleWindowChanged(QQuickWindow* window) {
                 if (window) {
-                    connect(window, &QQuickWindow::beforeSynchronizing, this, &ColorDisplay::sync, Qt::DirectConnection);
-                    connect(window, &QQuickWindow::sceneGraphInvalidated, this, &ColorDisplay::cleanup, Qt::DirectConnection);
+                    connect(window, &QQuickWindow::beforeSynchronizing, this, &GreyDisplay::sync, Qt::DirectConnection);
+                    connect(window, &QQuickWindow::sceneGraphInvalidated, this, &GreyDisplay::cleanup, Qt::DirectConnection);
                     window->setClearBeforeRendering(false);
                 }
             }
@@ -415,7 +415,7 @@ namespace chameleon {
             std::atomic_bool _rendererReady;
             QSize _canvasSize;
             QColor _backgroundColor;
-            std::unique_ptr<ColorDisplayRenderer> _colorDisplayRenderer;
+            std::unique_ptr<GreyDisplayRenderer> _greyDisplayRenderer;
             std::atomic_bool _rendererReady;
             QRectF _clearArea;
             QRectF _paintArea;

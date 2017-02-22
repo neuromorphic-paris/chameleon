@@ -20,10 +20,16 @@ namespace chameleon {
     class LogarithmicDisplayRenderer : public QObject, public QOpenGLFunctions {
         Q_OBJECT
         public:
-            LogarithmicDisplayRenderer(QSize canvasSize, float discardRatio, std::size_t colormap):
+            LogarithmicDisplayRenderer(
+                const QSize& canvasSize,
+                const float& discardRatio,
+                const std::size_t& colormap,
+                const QColor& backgroundColor
+            ):
                 _canvasSize(std::move(canvasSize)),
                 _discardRatio(discardRatio),
                 _colormap(colormap),
+                _backgroundColor(backgroundColor),
                 _timeDeltas(_canvasSize.width() * _canvasSize.height(), std::numeric_limits<float>::infinity()),
                 _duplicatedTimeDeltas(_canvasSize.width() * _canvasSize.height()),
                 _discardsChanged(false),
@@ -33,12 +39,12 @@ namespace chameleon {
                 _indices.reserve(static_cast<std::size_t>(
                     2 * (_canvasSize.width() * _canvasSize.height() - _canvasSize.width() + _canvasSize.height() - 2)
                 ));
-                for (auto y = static_cast<qint32>(0); y < _canvasSize.height() - 1; ++y) {
+                for (qint32 y = 0; y < _canvasSize.height() - 1; ++y) {
                     if (y > 0) {
                         _indices.push_back(y * _canvasSize.width());
                     }
 
-                    for (auto x = static_cast<qint32>(0); x < _canvasSize.width(); ++x) {
+                    for (qint32 x = 0; x < _canvasSize.width(); ++x) {
                         _indices.push_back(x + y * _canvasSize.width());
                         _indices.push_back(x + (y + 1) * _canvasSize.width());
                     }
@@ -48,8 +54,8 @@ namespace chameleon {
                     }
                 }
                 _coordinates.reserve(_canvasSize.width() * _canvasSize.height() * 2);
-                for (auto y = static_cast<qint32>(0); y < _canvasSize.height(); ++y) {
-                    for (auto x = static_cast<qint32>(0); x < _canvasSize.width(); ++x) {
+                for (qint32 y = 0; y < _canvasSize.height(); ++y) {
+                    for (qint32 x = 0; x < _canvasSize.width(); ++x) {
                         _coordinates.push_back(static_cast<float>(x));
                         _coordinates.push_back(static_cast<float>(y));
                     }
@@ -64,16 +70,16 @@ namespace chameleon {
             virtual ~LogarithmicDisplayRenderer() {}
 
             /// setRenderingArea defines the rendering area.
-            virtual void setRenderingArea(QRectF clearArea, QRectF paintArea, int windowHeight) {
-                _clearArea = std::move(clearArea);
+            virtual void setRenderingArea(const QRectF& clearArea, const QRectF& paintArea, const int& windowHeight) {
+                _clearArea = clearArea;
                 _clearArea.moveTop(windowHeight - _clearArea.top() - _clearArea.height());
-                _paintArea = std::move(paintArea);
+                _paintArea = paintArea;
                 _paintArea.moveTop(windowHeight - _paintArea.top() - _paintArea.height());
             }
 
             /// setDiscards defines the discards.
             /// If both the black and white discards are zero (default), the discards are computed automatically.
-            virtual void setDiscards(QVector2D discards) {
+            virtual void setDiscards(const QVector2D& discards) {
                 while (_accessingDiscards.test_and_set(std::memory_order_acquire)) {}
                 if (_automaticCalibration) {
                     if (discards.x() != 0 || discards.y() != 0) {
@@ -236,7 +242,12 @@ namespace chameleon {
                         static_cast<GLsizei>(_clearArea.width()),
                         static_cast<GLsizei>(_clearArea.height())
                     );
-                    glClearColor(0.0, 0.0, 0.0, 1.0);
+                    glClearColor(
+                        static_cast<GLfloat>(_backgroundColor.redF()),
+                        static_cast<GLfloat>(_backgroundColor.greenF()),
+                        static_cast<GLfloat>(_backgroundColor.blueF()),
+                        static_cast<GLfloat>(_backgroundColor.alphaF())
+                    );
                     glClear(GL_COLOR_BUFFER_BIT);
                     glDisable(GL_SCISSOR_TEST);
                     glViewport(
@@ -318,47 +329,48 @@ namespace chameleon {
                     case GL_NO_ERROR:
                         break;
                     case GL_INVALID_ENUM:
-                        throw std::runtime_error("OpenGL error: GL_INVALID_ENUM");
+                        throw std::logic_error("OpenGL error: GL_INVALID_ENUM");
                     case GL_INVALID_VALUE:
-                        throw std::runtime_error("OpenGL error: GL_INVALID_VALUE");
+                        throw std::logic_error("OpenGL error: GL_INVALID_VALUE");
                     case GL_INVALID_OPERATION:
-                        throw std::runtime_error("OpenGL error: GL_INVALID_OPERATION");
+                        throw std::logic_error("OpenGL error: GL_INVALID_OPERATION");
                     case GL_OUT_OF_MEMORY:
-                        throw std::runtime_error("OpenGL error: GL_OUT_OF_MEMORY");
+                        throw std::logic_error("OpenGL error: GL_OUT_OF_MEMORY");
                 }
             }
 
             /// checkShaderError checks for shader compilation errors.
             virtual void checkShaderError(GLuint shaderId) {
-                auto status = static_cast<GLint>(0);
+                GLint status = 0;
                 glGetShaderiv(shaderId, GL_COMPILE_STATUS, &status);
 
                 if (status != GL_TRUE) {
-                    auto messageLength = static_cast<GLint>(0);
+                    GLint messageLength = 0;
                     glGetShaderiv(shaderId, GL_INFO_LOG_LENGTH, &messageLength);
                     std::vector<char> errorMessage(messageLength);
                     glGetShaderInfoLog(shaderId, messageLength, nullptr, errorMessage.data());
-                    throw std::runtime_error("Shader error: " + std::string(errorMessage.data()));
+                    throw std::logic_error("Shader error: " + std::string(errorMessage.data()));
                 }
             }
 
-            /// checkShaderError checks for program errors.
+            /// checkProgramError checks for program errors.
             virtual void checkProgramError(GLuint programId) {
-                auto status = static_cast<GLint>(0);
+                GLint status = 0;
                 glGetProgramiv(programId, GL_LINK_STATUS, &status);
 
                 if (status != GL_TRUE) {
-                    auto messageLength = static_cast<GLint>(0);
+                    GLint messageLength = 0;
                     glGetProgramiv(programId, GL_INFO_LOG_LENGTH, &messageLength);
                     std::vector<char> errorMessage(messageLength);
                     glGetShaderInfoLog(programId, messageLength, nullptr, errorMessage.data());
-                    throw std::runtime_error("Program error: " + std::string(errorMessage.data()));
+                    throw std::logic_error("Program error: " + std::string(errorMessage.data()));
                 }
             }
 
             QSize _canvasSize;
             float _discardRatio;
             std::size_t _colormap;
+            QColor _backgroundColor;
             std::vector<GLuint> _indices;
             std::vector<float> _coordinates;
             std::vector<float> _timeDeltas;
@@ -381,23 +393,27 @@ namespace chameleon {
     /// LogarithmicDisplay displays a stream of events.
     class LogarithmicDisplay : public QQuickItem {
         Q_OBJECT
+        Q_INTERFACES(QQmlParserStatus)
         Q_PROPERTY(QSize canvasSize READ canvasSize WRITE setCanvasSize)
         Q_PROPERTY(QVector2D discards READ discards WRITE setDiscards NOTIFY discardsChanged)
         Q_PROPERTY(float discardRatio READ discardRatio WRITE setDiscardRatio)
         Q_PROPERTY(Colormap colormap READ colormap WRITE setColormap)
+        Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor)
         Q_PROPERTY(QRectF paintArea READ paintArea)
         public:
 
             /// Colormap defines the colormap used by the display.
-            enum Colormap {Grey, Heat};
+            enum Colormap {grey, heat};
             Q_ENUM(Colormap)
 
             LogarithmicDisplay() :
-                _canvasSizeSet(false),
-                _discardRatioSet(false),
-                _colormapSet(false),
-                _accessingRenderer(false),
-                _rendererReady(false)
+                _ready(false),
+                _rendererReady(false),
+                _discards(QVector2D(0, 0)),
+                _discardRatio(0.01),
+                _colormap(Colormap::grey),
+                _backgroundColor(Qt::black)
+
             {
                 connect(this, &QQuickItem::windowChanged, this, &LogarithmicDisplay::handleWindowChanged);
                 _accessingRenderer.clear(std::memory_order_release);
@@ -409,14 +425,14 @@ namespace chameleon {
             virtual ~LogarithmicDisplay() {}
 
             /// setCanvasSize defines the display coordinates.
-            /// The size will be passed to the openGL renderer, therefore it should only be set once.
+            /// The canvas size will be passed to the openGL renderer, therefore it should only be set during qml construction.
             virtual void setCanvasSize(QSize canvasSize) {
-                if (!_canvasSizeSet.load(std::memory_order_relaxed)) {
-                    _canvasSize = canvasSize;
-                    _canvasSizeSet.store(true, std::memory_order_release);
-                    setImplicitWidth(canvasSize.width());
-                    setImplicitHeight(canvasSize.height());
+                if (_ready.load(std::memory_order_acquire)) {
+                    throw std::logic_error("canvasSize can only be set during qml construction");
                 }
+                _canvasSize = canvasSize;
+                setImplicitWidth(canvasSize.width());
+                setImplicitHeight(canvasSize.height());
             }
 
             /// canvasSize returns the currently used canvasSize.
@@ -433,7 +449,7 @@ namespace chameleon {
                 } else {
                     _discardsToLoad = discards;
                 }
-                _accessingRenderer.clear(std::memory_order_relaxed);
+                _accessingRenderer.clear(std::memory_order_release);
             }
 
             /// discards returns the currently used discards.
@@ -442,12 +458,12 @@ namespace chameleon {
             }
 
             /// setDiscardRatio defines the discards ratio.
-            /// The discards ratio should be set only once.
+            /// The discards ratio will be passed to the openGL renderer, therefore it should only be set during qml construction.
             virtual void setDiscardRatio(float discardRatio) {
-                if (!_discardRatioSet.load(std::memory_order_relaxed)) {
-                    _discardRatio = discardRatio;
-                    _discardRatioSet.store(true, std::memory_order_release);
+                if (_ready.load(std::memory_order_acquire)) {
+                    throw std::logic_error("discardRatio can only be set during qml construction");
                 }
+                _discardRatio = discardRatio;
             }
 
             /// discardRatio returns the currently used discardRatio.
@@ -456,17 +472,31 @@ namespace chameleon {
             }
 
             /// setColormap defines the colormap.
-            /// The colormap should be set only once.
+            /// The colormap will be passed to the openGL renderer, therefore it should only be set during qml construction.
             virtual void setColormap(Colormap colormap) {
-                if (!_colormapSet.load(std::memory_order_relaxed)) {
-                    _colormap = colormap;
-                    _colormapSet.store(true, std::memory_order_release);
+                if (_ready.load(std::memory_order_acquire)) {
+                    throw std::logic_error("colormap can only be set during qml construction");
                 }
+                _colormap = colormap;
             }
 
             /// colormap returns the currently used colormap.
             virtual Colormap colormap() const {
                 return _colormap;
+            }
+
+            /// setBackgroundColor defines the background color used to compensate the parent's shape.
+            /// The background color will be passed to the openGL renderer, therefore it should only be set during qml construction.
+            virtual void setBackgroundColor(QColor backgroundColor) {
+                if (_ready.load(std::memory_order_acquire)) {
+                    throw std::logic_error("backgroundColor can only be set during qml construction");
+                }
+                _backgroundColor = backgroundColor;
+            }
+
+            /// backgroundColor returns the currently used backgroundColor.
+            virtual QColor backgroundColor() const {
+                return _backgroundColor;
             }
 
             /// paintArea returns the paint area in window coordinates.
@@ -477,9 +507,17 @@ namespace chameleon {
             /// push adds an event to the display.
             template<typename Event>
             void push(Event event) {
-                if (_rendererReady.load(std::memory_order_acquire)) {
+                if (_rendererReady.load(std::memory_order_relaxed)) {
                     _logarithmicDisplayRenderer->push<Event>(event);
                 }
+            }
+
+            /// componentComplete is called when all the qml values are binded.
+            virtual void componentComplete() {
+                if (_canvasSize.width() <= 0 || _canvasSize.height() <= 0) {
+                    throw std::logic_error("canvasSize cannot have a null component, make sure that it is set in qml");
+                }
+                _ready.store(true, std::memory_order_release);
             }
 
         signals:
@@ -494,14 +532,10 @@ namespace chameleon {
 
             /// sync adapts the renderer to external changes.
             void sync() {
-                if (
-                    _canvasSizeSet.load(std::memory_order_acquire)
-                    && _discardRatioSet.load(std::memory_order_acquire)
-                    && _colormapSet.load(std::memory_order_acquire)
-                ) {
+                if (_ready.load(std::memory_order_relaxed)) {
                     if (!_logarithmicDisplayRenderer) {
                         _logarithmicDisplayRenderer = std::unique_ptr<LogarithmicDisplayRenderer>(
-                            new LogarithmicDisplayRenderer(_canvasSize, _discardRatio, static_cast<std::size_t>(_colormap))
+                            new LogarithmicDisplayRenderer(_canvasSize, _discardRatio, static_cast<std::size_t>(_colormap), _backgroundColor)
                         );
                         connect(
                             window(),
@@ -518,8 +552,8 @@ namespace chameleon {
                         );
                         while (_accessingRenderer.test_and_set(std::memory_order_acquire)) {}
                         _logarithmicDisplayRenderer->setDiscards(_discardsToLoad);
-                        _rendererReady.store(true, std::memory_order_release);
                         _accessingRenderer.clear(std::memory_order_release);
+                        _rendererReady.store(true, std::memory_order_release);
                     }
                     auto clearArea = QRectF(0, 0, width() * window()->devicePixelRatio(), height() * window()->devicePixelRatio());
                     for (auto item = static_cast<QQuickItem*>(this); item; item = item->parentItem()) {
@@ -535,7 +569,7 @@ namespace chameleon {
                             _paintArea.moveTop(clearArea.top());
                         } else {
                             _paintArea.setWidth(clearArea.width());
-                            _paintArea.setHeight(clearArea.width()  * _canvasSize.height() / _canvasSize.width());
+                            _paintArea.setHeight(clearArea.width() * _canvasSize.height() / _canvasSize.width());
                             _paintArea.moveLeft(clearArea.left());
                             _paintArea.moveTop(clearArea.top() + (clearArea.height() - _paintArea.height()) / 2);
                         }
@@ -577,17 +611,16 @@ namespace chameleon {
             }
 
         protected:
-            QSize _canvasSize;
-            std::atomic_bool _canvasSizeSet;
-            QVector2D _discards;
-            std::unique_ptr<LogarithmicDisplayRenderer> _logarithmicDisplayRenderer;
-            float _discardRatio;
-            std::atomic_bool _discardRatioSet;
-            Colormap _colormap;
-            std::atomic_bool _colormapSet;
-            std::atomic_flag _accessingRenderer;
+            std::atomic_bool _ready;
             std::atomic_bool _rendererReady;
+            std::atomic_flag _accessingRenderer;
+            QSize _canvasSize;
+            QVector2D _discards;
             QVector2D _discardsToLoad;
+            float _discardRatio;
+            Colormap _colormap;
+            QColor _backgroundColor;
+            std::unique_ptr<LogarithmicDisplayRenderer> _logarithmicDisplayRenderer;
             QRectF _clearArea;
             QRectF _paintArea;
     };
