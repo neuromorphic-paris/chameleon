@@ -84,7 +84,7 @@ namespace chameleon {
 
             /// promoteBlob adds a blob to the display or shows a hidden blob.
             template <typename Blob>
-            void promoteBlob(std::size_t id, const Blob& blob) {
+            void promoteBlob(const std::size_t& id, const Blob& blob) {
                 while (_accessingBlobs.test_and_set(std::memory_order_acquire)) {}
                 const auto idAndBlobAndIsVisibleCandidate = _blobAndIsVisibleById.find(id);
                 if (idAndBlobAndIsVisibleCandidate == _blobAndIsVisibleById.end()) {
@@ -108,7 +108,7 @@ namespace chameleon {
 
             /// updateBlob changes a visible blob.
             template <typename Blob>
-            void updateBlob(std::size_t id, const Blob& blob) {
+            void updateBlob(const std::size_t& id, const Blob& blob) {
                 while (_accessingBlobs.test_and_set(std::memory_order_acquire)) {}
                 const auto idAndBlobAndIsVisible = _blobAndIsVisibleById.find(id);
                 idAndBlobAndIsVisible->second.first.x = blob.x;
@@ -121,7 +121,7 @@ namespace chameleon {
 
             /// demoteBlob hides a blob while keeping its data.
             template <typename Blob>
-            void demoteBlob(std::size_t id, const Blob& blob) {
+            void demoteBlob(const std::size_t& id, const Blob& blob) {
                 while (_accessingBlobs.test_and_set(std::memory_order_acquire)) {}
                 const auto idAndBlobAndIsVisible = _blobAndIsVisibleById.find(id);
                 idAndBlobAndIsVisible->second.first.x = blob.x;
@@ -135,7 +135,7 @@ namespace chameleon {
 
             /// deleteBlob removes a blob from the display.
             template <typename Blob>
-            void deleteBlob(std::size_t id, const Blob&) {
+            void deleteBlob(const std::size_t& id, const Blob&) {
                 while (_accessingBlobs.test_and_set(std::memory_order_acquire)) {}
                 _blobAndIsVisibleById.erase(id);
                 _accessingBlobs.clear(std::memory_order_release);
@@ -177,7 +177,7 @@ namespace chameleon {
             ///     - a is the major radius
             ///     - b is the minor radius
             ///     - angle is the angle between the horizontal axis and the major axis
-            std::array<double, 3> ellipseFromBlob(const ProtectedBlob& blob, double confidence) {
+            std::array<double, 3> ellipseFromBlob(const ProtectedBlob& blob, const double& confidence) {
                 const auto deltaSquareRoot = std::sqrt(std::pow(blob.squaredSigmaX - blob.squaredSigmaY, 2) + 4 * std::pow(blob.sigmaXY, 2)) / 2;
                 const auto firstOrderCoefficient = (blob.squaredSigmaX + blob.squaredSigmaY) / 2;
                 return std::array<double, 3>{{

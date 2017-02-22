@@ -16,7 +16,7 @@ namespace chameleon {
     class BackgroundCleanerRenderer : public QObject, public QOpenGLFunctions {
         Q_OBJECT
         public:
-            BackgroundCleanerRenderer(QColor color) :
+            BackgroundCleanerRenderer(const QColor& color) :
                 _color(color),
                 _programSetup(false)
             {
@@ -27,9 +27,9 @@ namespace chameleon {
             BackgroundCleanerRenderer& operator=(BackgroundCleanerRenderer&&) = default;
             virtual ~BackgroundCleanerRenderer() {}
 
-            /// setRenderingArea defines the rendering area.
-            virtual void setRenderingArea(QRect renderingArea, int windowHeight) {
-                _clearArea = std::move(renderingArea);
+            /// setRenderingArea defines the clear area.
+            virtual void setRenderingArea(const QRectF& clearArea, const int& windowHeight) {
+                _clearArea = clearArea;
                 _clearArea.moveTop(windowHeight - _clearArea.top() - _clearArea.height());
             }
 
@@ -53,7 +53,12 @@ namespace chameleon {
                         static_cast<GLsizei>(_clearArea.width()),
                         static_cast<GLsizei>(_clearArea.height())
                     );
-                    glClearColor(_color.redF(), _color.greenF(), _color.blueF(), _color.alphaF());
+                    glClearColor(
+                        static_cast<GLfloat>(_color.redF()),
+                        static_cast<GLfloat>(_color.greenF()),
+                        static_cast<GLfloat>(_color.blueF()),
+                        static_cast<GLfloat>(_color.alphaF())
+                    );
                     glClear(GL_COLOR_BUFFER_BIT);
                     glDisable(GL_SCISSOR_TEST);
                 }
@@ -61,7 +66,7 @@ namespace chameleon {
 
         protected:
             QColor _color;
-            QRect _clearArea;
+            QRectF _clearArea;
             bool _programSetup;
             GLuint _programId;
     };
@@ -69,10 +74,12 @@ namespace chameleon {
     /// BackgroundCleaner cleans the background for OpenGL renderers.
     class BackgroundCleaner : public QQuickItem {
         Q_OBJECT
+        Q_INTERFACES(QQmlParserStatus)
         Q_PROPERTY(QColor color READ color WRITE setColor)
         public:
             BackgroundCleaner() :
-                _colorSet(false)
+                _ready(false),
+                _color(Qt::black)
             {
                 connect(this, &QQuickItem::windowChanged, this, &BackgroundCleaner::handleWindowChanged);
             }
@@ -83,12 +90,12 @@ namespace chameleon {
             virtual ~BackgroundCleaner() {}
 
             /// setColor defines the clear color.
-            /// The color will be passed to the openGL renderer, therefore it should only be set once.
+            /// The color will be passed to the openGL renderer, therefore it should only be set during qml construction.
             virtual void setColor(QColor color) {
-                if (!_colorSet.load(std::memory_order_relaxed)) {
-                    _color = color;
-                    _colorSet.store(true, std::memory_order_release);
+                if (_ready.load(std::memory_order_acquire)) {
+                    throw std::logic_error("color can only be set during qml construction");
                 }
+                _color = color;
             }
 
             /// color returns the currently used color.
@@ -96,11 +103,16 @@ namespace chameleon {
                 return _color;
             }
 
+            /// componentComplete is called when all the qml values are binded.
+            virtual void componentComplete() {
+                _ready.store(true, std::memory_order_release);
+            }
+
         public slots:
 
             /// sync adapts the renderer to external changes.
             void sync() {
-                if (_colorSet.load(std::memory_order_acquire)) {
+                if (_ready.load(std::memory_order_relaxed)) {
                     if (!_backgroundCleanerRenderer) {
                         _backgroundCleanerRenderer = std::unique_ptr<BackgroundCleanerRenderer>(
                             new BackgroundCleanerRenderer(_color)
@@ -113,15 +125,15 @@ namespace chameleon {
                             Qt::DirectConnection
                         );
                     }
-                    _backgroundCleanerRenderer->setRenderingArea(
-                        QRect(
-                            x() * window()->devicePixelRatio(),
-                            y() * window()->devicePixelRatio(),
-                            width() * window()->devicePixelRatio(),
-                            height() * window()->devicePixelRatio()
-                        ),
-                        window()->height() * window()->devicePixelRatio()
-                    );
+                    auto clearArea = QRectF(0, 0, width() * window()->devicePixelRatio(), height() * window()->devicePixelRatio());
+                    for (auto item = static_cast<QQuickItem*>(this); item; item = item->parentItem()) {
+                        clearArea.moveLeft(clearArea.left() + item->x() * window()->devicePixelRatio());
+                        clearArea.moveTop(clearArea.top() + item->y() * window()->devicePixelRatio());
+                    }
+                    if (clearArea != _clearArea) {
+                        _clearArea = std::move(clearArea);
+                        _backgroundCleanerRenderer->setRenderingArea(_clearArea, window()->height() * window()->devicePixelRatio());
+                    }
                 }
             }
 
@@ -149,8 +161,9 @@ namespace chameleon {
             }
 
         protected:
+            std::atomic_bool _ready;
             QColor _color;
-            std::atomic_bool _colorSet;
             std::unique_ptr<BackgroundCleanerRenderer> _backgroundCleanerRenderer;
+            QRectF _clearArea;
     };
 }

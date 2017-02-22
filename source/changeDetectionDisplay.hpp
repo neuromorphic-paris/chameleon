@@ -6,10 +6,10 @@
 #include <QtGui/QOpenGLContext>
 
 #include <memory>
-#include <stdexcept>
 #include <atomic>
 #include <limits>
 #include <vector>
+#include <stdexcept>
 
 /// chameleon provides Qt components for event stream display.
 namespace chameleon {
@@ -18,22 +18,23 @@ namespace chameleon {
     class ChangeDetectionDisplayRenderer : public QObject, public QOpenGLFunctions {
         Q_OBJECT
         public:
-            ChangeDetectionDisplayRenderer(QSize canvasSize, float decay, float initialTimestamp) :
-                _canvasSize(std::move(canvasSize)),
+            ChangeDetectionDisplayRenderer(const QSize& canvasSize, const float& decay, const QColor& backgroundColor) :
+                _canvasSize(canvasSize),
                 _decay(decay),
-                _currentTimestamp(initialTimestamp),
+                _backgroundColor(backgroundColor),
+                _currentTimestamp(0),
                 _duplicatedTimestampsAndAreIncreases(_canvasSize.width() * _canvasSize.height() * 2),
                 _programSetup(false)
             {
                 _indices.reserve(static_cast<std::size_t>(
                     2 * (_canvasSize.width() * _canvasSize.height() - _canvasSize.width() + _canvasSize.height() - 2)
                 ));
-                for (auto y = static_cast<qint32>(0); y < _canvasSize.height() - 1; ++y) {
+                for (qint32 y = 0; y < _canvasSize.height() - 1; ++y) {
                     if (y > 0) {
                         _indices.push_back(y * _canvasSize.width());
                     }
 
-                    for (auto x = static_cast<qint32>(0); x < _canvasSize.width(); ++x) {
+                    for (qint32 x = 0; x < _canvasSize.width(); ++x) {
                         _indices.push_back(x + y * _canvasSize.width());
                         _indices.push_back(x + (y + 1) * _canvasSize.width());
                     }
@@ -44,8 +45,8 @@ namespace chameleon {
                 }
                 _coordinates.reserve(_canvasSize.width() * _canvasSize.height() * 2);
                 _timestampsAndAreIncreases.reserve(_duplicatedTimestampsAndAreIncreases.size());
-                for (auto y = static_cast<qint32>(0); y < _canvasSize.height(); ++y) {
-                    for (auto x = static_cast<qint32>(0); x < _canvasSize.width(); ++x) {
+                for (qint32 y = 0; y < _canvasSize.height(); ++y) {
+                    for (qint32 x = 0; x < _canvasSize.width(); ++x) {
                         _coordinates.push_back(static_cast<float>(x));
                         _coordinates.push_back(static_cast<float>(y));
                         _timestampsAndAreIncreases.push_back(-std::numeric_limits<float>::infinity());
@@ -61,10 +62,10 @@ namespace chameleon {
             virtual ~ChangeDetectionDisplayRenderer() {}
 
             /// setRenderingArea defines the rendering area.
-            virtual void setRenderingArea(QRectF clearArea, QRectF paintArea, int windowHeight) {
-                _clearArea = std::move(clearArea);
+            virtual void setRenderingArea(const QRectF& clearArea, const QRectF& paintArea, const int& windowHeight) {
+                _clearArea = clearArea;
                 _clearArea.moveTop(windowHeight - _clearArea.top() - _clearArea.height());
-                _paintArea = std::move(paintArea);
+                _paintArea = paintArea;
                 _paintArea.moveTop(windowHeight - _paintArea.top() - _paintArea.height());
             }
 
@@ -112,7 +113,7 @@ namespace chameleon {
                             "        if (timestampAndIsIncrease.y > 0.5) {"
                             "            exposure = 0.5 * exp(-(currentTimestamp - timestampAndIsIncrease.x) / decay) + 0.5;"
                             "        } else {"
-                            "            exposure = 0.5 - 0.5 * exp(-(currentTimestamp - timestampAndIsIncrease.x) / float(decay));"
+                            "            exposure = 0.5 - 0.5 * exp(-(currentTimestamp - timestampAndIsIncrease.x) / decay);"
                             "        }"
                             "    }"
                             "}"
@@ -189,7 +190,12 @@ namespace chameleon {
                         static_cast<GLsizei>(_clearArea.width()),
                         static_cast<GLsizei>(_clearArea.height())
                     );
-                    glClearColor(0.0, 0.0, 0.0, 1.0);
+                    glClearColor(
+                        static_cast<GLfloat>(_backgroundColor.redF()),
+                        static_cast<GLfloat>(_backgroundColor.greenF()),
+                        static_cast<GLfloat>(_backgroundColor.blueF()),
+                        static_cast<GLfloat>(_backgroundColor.alphaF())
+                    );
                     glClear(GL_COLOR_BUFFER_BIT);
                     glDisable(GL_SCISSOR_TEST);
                     glViewport(
@@ -225,46 +231,47 @@ namespace chameleon {
                     case GL_NO_ERROR:
                         break;
                     case GL_INVALID_ENUM:
-                        throw std::runtime_error("OpenGL error: GL_INVALID_ENUM");
+                        throw std::logic_error("OpenGL error: GL_INVALID_ENUM");
                     case GL_INVALID_VALUE:
-                        throw std::runtime_error("OpenGL error: GL_INVALID_VALUE");
+                        throw std::logic_error("OpenGL error: GL_INVALID_VALUE");
                     case GL_INVALID_OPERATION:
-                        throw std::runtime_error("OpenGL error: GL_INVALID_OPERATION");
+                        throw std::logic_error("OpenGL error: GL_INVALID_OPERATION");
                     case GL_OUT_OF_MEMORY:
-                        throw std::runtime_error("OpenGL error: GL_OUT_OF_MEMORY");
+                        throw std::logic_error("OpenGL error: GL_OUT_OF_MEMORY");
                 }
             }
 
             /// checkShaderError checks for shader compilation errors.
             virtual void checkShaderError(GLuint shaderId) {
-                auto status = static_cast<GLint>(0);
+                GLint status = 0;
                 glGetShaderiv(shaderId, GL_COMPILE_STATUS, &status);
 
                 if (status != GL_TRUE) {
-                    auto messageLength = static_cast<GLint>(0);
+                    GLint messageLength = 0;
                     glGetShaderiv(shaderId, GL_INFO_LOG_LENGTH, &messageLength);
-                    std::vector<char> errorMessage(messageLength);
+                    auto errorMessage = std::vector<char>(messageLength);
                     glGetShaderInfoLog(shaderId, messageLength, nullptr, errorMessage.data());
-                    throw std::runtime_error("Shader error: " + std::string(errorMessage.data()));
+                    throw std::logic_error("Shader error: " + std::string(errorMessage.data()));
                 }
             }
 
-            /// checkShaderError checks for program errors.
+            /// checkProgramError checks for program errors.
             virtual void checkProgramError(GLuint programId) {
-                auto status = static_cast<GLint>(0);
+                GLint status = 0;
                 glGetProgramiv(programId, GL_LINK_STATUS, &status);
 
                 if (status != GL_TRUE) {
-                    auto messageLength = static_cast<GLint>(0);
+                    GLint messageLength = 0;
                     glGetProgramiv(programId, GL_INFO_LOG_LENGTH, &messageLength);
                     std::vector<char> errorMessage(messageLength);
                     glGetShaderInfoLog(programId, messageLength, nullptr, errorMessage.data());
-                    throw std::runtime_error("Program error: " + std::string(errorMessage.data()));
+                    throw std::logic_error("Program error: " + std::string(errorMessage.data()));
                 }
             }
 
             QSize _canvasSize;
             float _decay;
+            QColor _backgroundColor;
             float _currentTimestamp;
             float _duplicatedCurrentTimestamp;
             std::vector<GLuint> _indices;
@@ -284,16 +291,17 @@ namespace chameleon {
     /// ChangeDetectionDisplay displays a stream of events.
     class ChangeDetectionDisplay : public QQuickItem {
         Q_OBJECT
+        Q_INTERFACES(QQmlParserStatus)
         Q_PROPERTY(QSize canvasSize READ canvasSize WRITE setCanvasSize)
         Q_PROPERTY(float decay READ decay WRITE setDecay)
-        Q_PROPERTY(float initialTimestamp READ initialTimestamp WRITE setInitialTimestamp)
+        Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor)
         Q_PROPERTY(QRectF paintArea READ paintArea)
         public:
             ChangeDetectionDisplay() :
-                _canvasSizeSet(false),
-                _decaySet(false),
-                _initialTimestampSet(false),
-                _rendererReady(false)
+                _ready(false),
+                _rendererReady(false),
+                _decay(1e5),
+                _backgroundColor(Qt::black)
             {
                 connect(this, &QQuickItem::windowChanged, this, &ChangeDetectionDisplay::handleWindowChanged);
             }
@@ -304,14 +312,14 @@ namespace chameleon {
             virtual ~ChangeDetectionDisplay() {}
 
             /// setCanvasSize defines the display coordinates.
-            /// The size will be passed to the openGL renderer, therefore it should only be set once.
+            /// The canvas size will be passed to the openGL renderer, therefore it should only be set during qml construction.
             virtual void setCanvasSize(QSize canvasSize) {
-                if (!_canvasSizeSet.load(std::memory_order_relaxed)) {
-                    _canvasSize = canvasSize;
-                    _canvasSizeSet.store(true, std::memory_order_release);
-                    setImplicitWidth(canvasSize.width());
-                    setImplicitHeight(canvasSize.height());
+                if (_ready.load(std::memory_order_acquire)) {
+                    throw std::logic_error("canvasSize can only be set during qml construction");
                 }
+                _canvasSize = canvasSize;
+                setImplicitWidth(canvasSize.width());
+                setImplicitHeight(canvasSize.height());
             }
 
             /// canvasSize returns the currently used canvasSize.
@@ -320,12 +328,12 @@ namespace chameleon {
             }
 
             /// setDecay defines the pixel decay.
-            /// The decay will be passed to the openGL renderer, therefore it should only be set once.
+            /// The decay will be passed to the openGL renderer, therefore it should only be set during qml construction.
             virtual void setDecay(float decay) {
-                if (!_decaySet.load(std::memory_order_relaxed)) {
-                    _decay = decay;
-                    _decaySet.store(true, std::memory_order_release);
+                if (_ready.load(std::memory_order_acquire)) {
+                    throw std::logic_error("decay can only be set during qml construction");
                 }
+                _decay = decay;
             }
 
             /// decay returns the currently used decay.
@@ -333,18 +341,18 @@ namespace chameleon {
                 return _decay;
             }
 
-            /// setInitialTimestamp defines the initial timestamp.
-            /// The initial timestamp will be passed to the openGL renderer, therefore it should only be set once.
-            virtual void setInitialTimestamp(float initialTimestamp) {
-                if (!_initialTimestampSet.load(std::memory_order_relaxed)) {
-                    _initialTimestamp = initialTimestamp;
-                    _initialTimestampSet.store(true, std::memory_order_release);
+            /// setBackgroundColor defines the background color used to compensate the parent's shape.
+            /// The background color will be passed to the openGL renderer, therefore it should only be set during qml construction.
+            virtual void setBackgroundColor(QColor backgroundColor) {
+                if (_ready.load(std::memory_order_acquire)) {
+                    throw std::logic_error("backgroundColor can only be set during qml construction");
                 }
+                _backgroundColor = backgroundColor;
             }
 
-            /// initialTimestamp returns the initial timestamp.
-            virtual float initialTimestamp() const {
-                return _initialTimestamp;
+            /// backgroundColor returns the currently used backgroundColor.
+            virtual QColor backgroundColor() const {
+                return _backgroundColor;
             }
 
             /// paintArea returns the paint area in window coordinates.
@@ -360,6 +368,14 @@ namespace chameleon {
                 }
             }
 
+            /// componentComplete is called when all the qml values are binded.
+            virtual void componentComplete() {
+                if (_canvasSize.width() <= 0 || _canvasSize.height() <= 0) {
+                    throw std::logic_error("canvasSize cannot have a null component, make sure that it is set in qml");
+                }
+                _ready.store(true, std::memory_order_release);
+            }
+
         signals:
 
             /// paintAreaChanged notifies a paint area change.
@@ -369,14 +385,10 @@ namespace chameleon {
 
             /// sync adapts the renderer to external changes.
             void sync() {
-                if (
-                    _canvasSizeSet.load(std::memory_order_acquire)
-                    && _decaySet.load(std::memory_order_acquire)
-                    && _initialTimestampSet.load(std::memory_order_acquire)
-                ) {
+                if (_ready.load(std::memory_order_relaxed)) {
                     if (!_changeDetectionDisplayRenderer) {
                         _changeDetectionDisplayRenderer = std::unique_ptr<ChangeDetectionDisplayRenderer>(
-                            new ChangeDetectionDisplayRenderer(_canvasSize, _decay, _initialTimestamp)
+                            new ChangeDetectionDisplayRenderer(_canvasSize, _decay, _backgroundColor)
                         );
                         connect(
                             window(),
@@ -401,7 +413,7 @@ namespace chameleon {
                             _paintArea.moveTop(clearArea.top());
                         } else {
                             _paintArea.setWidth(clearArea.width());
-                            _paintArea.setHeight(clearArea.width()  * _canvasSize.height() / _canvasSize.width());
+                            _paintArea.setHeight(clearArea.width() * _canvasSize.height() / _canvasSize.width());
                             _paintArea.moveLeft(clearArea.left());
                             _paintArea.moveTop(clearArea.top() + (clearArea.height() - _paintArea.height()) / 2);
                         }
@@ -435,14 +447,12 @@ namespace chameleon {
             }
 
         protected:
-            QSize _canvasSize;
-            std::atomic_bool _canvasSizeSet;
-            float _decay;
-            std::atomic_bool _decaySet;
-            float _initialTimestamp;
-            std::atomic_bool _initialTimestampSet;
-            std::unique_ptr<ChangeDetectionDisplayRenderer> _changeDetectionDisplayRenderer;
+            std::atomic_bool _ready;
             std::atomic_bool _rendererReady;
+            QSize _canvasSize;
+            float _decay;
+            QColor _backgroundColor;
+            std::unique_ptr<ChangeDetectionDisplayRenderer> _changeDetectionDisplayRenderer;
             QRectF _clearArea;
             QRectF _paintArea;
     };
