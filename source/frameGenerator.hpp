@@ -39,12 +39,13 @@ namespace chameleon {
             }
 
             /// saveFrameTo waits for a complete render, takes a screenshots and writes it to a file.
-            virtual void saveFrameTo(const QString& filename) {
+            virtual bool saveFrameTo(const QString& filename) {
                 _renderingRequired.store(true, std::memory_order_release);
                 auto lock = std::unique_lock<std::mutex>(_pixelsMutex);
                 _pixelsUpdated.wait(lock);
+                auto success = true;
                 if (!_closing) {
-                    QImage(
+                    success = QImage(
                         _pixels.data(),
                         _imageWidth,
                         _imageHeight,
@@ -53,6 +54,7 @@ namespace chameleon {
                     ).mirrored().save(filename);
                 }
                 lock.unlock();
+                return success;
             }
 
         public slots:
@@ -140,7 +142,9 @@ namespace chameleon {
             /// saveFrameTo triggers a frame render and stores the resulting png image to the given file.
             virtual void saveFrameTo(const std::string& filename) {
                 if (!_closing.load(std::memory_order_relaxed)) {
-                    _frameGeneratorRenderer->writeTo(QString::fromStdString(filename));
+                    if (!_frameGeneratorRenderer->saveFrameTo(QString::fromStdString(filename))) {
+                        throw std::runtime_error(std::string("saving a frame to '") + filename + "' failed");
+                    }
                 }
             }
 

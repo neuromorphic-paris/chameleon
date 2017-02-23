@@ -24,6 +24,8 @@ namespace chameleon {
                 _brush(Qt::transparent, Qt::SolidPattern),
                 _confidence(1.96)
             {
+                _pen.setColor(Qt::black);
+                _pen.setWidthF(1);
                 _accessingBlobs.clear(std::memory_order_release);
             }
             BlobDisplay(const BlobDisplay&) = delete;
