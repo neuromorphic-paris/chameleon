@@ -21,10 +21,10 @@ namespace chameleon {
         public:
             FrameGeneratorRenderer() :
                 _programSetup(false),
-                _renderingRequired(false),
                 _beforeRenderingDone(false),
                 _closing(false)
             {
+                _renderingNotRequired.clear(std::memory_order_release);
             }
             FrameGeneratorRenderer(const FrameGeneratorRenderer&) = delete;
             FrameGeneratorRenderer(FrameGeneratorRenderer&&) = default;
@@ -40,12 +40,17 @@ namespace chameleon {
 
             /// saveFrameTo waits for a complete render, takes a screenshots and writes it to a file.
             virtual bool saveFrameTo(const QString& filename) {
-                _renderingRequired.store(true, std::memory_order_release);
+                _renderingNotRequired.clear(std::memory_order_release);
+                _pixelsMutex.lock();
+                if (_closing) {
+                    _pixelsMutex.unlock();
+                    return true;
+                }
+                _pixelsMutex.unlock();
                 auto lock = std::unique_lock<std::mutex>(_pixelsMutex);
                 _pixelsUpdated.wait(lock);
-                auto success = true;
-                if (!_closing) {
-                    success = QImage(
+                if (_closing) {
+                    const auto success = QImage(
                         _pixels.data(),
                         _imageWidth,
                         _imageHeight,
@@ -61,8 +66,7 @@ namespace chameleon {
 
             /// beforeRenderingCallback must be called when a rendering starts.
             void beforeRenderingCallback() {
-                if (_renderingRequired.load(std::memory_order_acquire)) {
-                    _renderingRequired.store(false, std::memory_order_release);
+                if (!_renderingNotRequired.test_and_set(std::memory_order_relaxed)) {
                     _beforeRenderingDone = true;
                 }
             }
@@ -105,7 +109,7 @@ namespace chameleon {
             void closing() {
                 {
                     const std::lock_guard<std::mutex> lock(_pixelsMutex);
-                    _closing = true;
+                    _closing.store(true, std::memory_order_release);
                 }
                 _pixelsUpdated.notify_one();
             }
@@ -114,7 +118,7 @@ namespace chameleon {
             QRectF _captureArea;
             bool _programSetup;
             GLuint _programId;
-            std::atomic_bool _renderingRequired;
+            std::atomic_flag _renderingNotRequired;
             bool _beforeRenderingDone;
             std::vector<unsigned char> _pixels;
             std::mutex _pixelsMutex;
