@@ -350,15 +350,15 @@ namespace chameleon {
             /// sync adapts the renderer to external changes.
             void sync() {
                 if (_ready.load(std::memory_order_relaxed)) {
-                    if (!_changeDetectionDisplayRenderer) {
-                        _changeDetectionDisplayRenderer = std::unique_ptr<ChangeDetectionDisplayRenderer>(
-                            new ChangeDetectionDisplayRenderer(_canvasSize, _backgroundColor)
+                    if (!_greyDisplayRenderer) {
+                        _greyDisplayRenderer = std::unique_ptr<GreyDisplayRenderer>(
+                            new GreyDisplayRenderer(_canvasSize, _backgroundColor)
                         );
                         connect(
                             window(),
                             &QQuickWindow::beforeRendering,
-                            _changeDetectionDisplayRenderer.get(),
-                            &ChangeDetectionDisplayRenderer::paint,
+                            _greyDisplayRenderer.get(),
+                            &GreyDisplayRenderer::paint,
                             Qt::DirectConnection
                         );
                         _rendererReady.store(true, std::memory_order_release);
@@ -381,7 +381,7 @@ namespace chameleon {
                             _paintArea.moveLeft(clearArea.left());
                             _paintArea.moveTop(clearArea.top() + (clearArea.height() - _paintArea.height()) / 2);
                         }
-                        _changeDetectionDisplayRenderer->setRenderingArea(_clearArea, _paintArea, window()->height() * window()->devicePixelRatio());
+                        _greyDisplayRenderer->setRenderingArea(_clearArea, _paintArea, window()->height() * window()->devicePixelRatio());
                         paintAreaChanged(_paintArea);
                     }
                 }
@@ -416,7 +416,6 @@ namespace chameleon {
             QSize _canvasSize;
             QColor _backgroundColor;
             std::unique_ptr<GreyDisplayRenderer> _greyDisplayRenderer;
-            std::atomic_bool _rendererReady;
             QRectF _clearArea;
             QRectF _paintArea;
     };
