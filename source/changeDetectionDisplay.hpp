@@ -88,7 +88,7 @@ namespace chameleon {
                 if (!_programSetup) {
                     _programSetup = true;
 
-                    // Compile the vertex shader
+                    // compile the vertex shader
                     const auto vertexShaderId = glCreateShader(GL_VERTEX_SHADER);
                     {
                         const auto vertexShader = std::string(
@@ -118,8 +118,8 @@ namespace chameleon {
                             "    }"
                             "}"
                         );
-                        auto vertexShaderContent = vertexShader.c_str();
-                        auto vertexShaderSize = vertexShader.size();
+                        const auto vertexShaderContent = vertexShader.c_str();
+                        const auto vertexShaderSize = vertexShader.size();
                         glShaderSource(
                             vertexShaderId,
                             1,
@@ -130,18 +130,18 @@ namespace chameleon {
                     glCompileShader(vertexShaderId);
                     checkShaderError(vertexShaderId);
 
-                    // Compile the fragment shader
+                    // compile the fragment shader
                     const auto fragmentShaderId = glCreateShader(GL_FRAGMENT_SHADER);
                     {
-                        auto fragmentShader = std::string(
+                        const auto fragmentShader = std::string(
                             "#version 120\n"
                             "varying float exposure;"
                             "void main() {"
                             "    gl_FragColor = vec4(exposure, exposure, exposure, 1.0);"
                             "}"
                         );
-                        auto fragmentShaderContent = fragmentShader.c_str();
-                        auto fragmentShaderSize = fragmentShader.size();
+                        const auto fragmentShaderContent = fragmentShader.c_str();
+                        const auto fragmentShaderSize = fragmentShader.size();
                         glShaderSource(
                             fragmentShaderId,
                             1,
@@ -152,7 +152,7 @@ namespace chameleon {
                     glCompileShader(fragmentShaderId);
                     checkShaderError(fragmentShaderId);
 
-                    // Create the shaders pipeline
+                    // create the shaders pipeline
                     _programId = glCreateProgram();
                     glAttachShader(_programId, vertexShaderId);
                     glAttachShader(_programId, fragmentShaderId);
@@ -164,24 +164,24 @@ namespace chameleon {
                     glDeleteShader(fragmentShaderId);
                     checkProgramError(_programId);
 
-                    // Set the uniform values
+                    // set the uniform values
                     glUniform1f(glGetUniformLocation(_programId, "width"), static_cast<GLfloat>(_canvasSize.width()));
                     glUniform1f(glGetUniformLocation(_programId, "height"), static_cast<GLfloat>(_canvasSize.height()));
                     glUniform1f(glGetUniformLocation(_programId, "decay"), static_cast<GLfloat>(_decay));
                     _currentTimestampLocation = glGetUniformLocation(_programId, "currentTimestamp");
 
-                    // Additional OpenGL settings
+                    // additional OpenGL settings
                     glDisable(GL_DEPTH_TEST);
                     checkOpenGLError();
                 } else {
 
-                    // Copy the events to minimise the strain on the event pipeline
+                    // copy the events to minimise the strain on the event pipeline
                     while (_accessingTimestampsAndAreIncreases.test_and_set(std::memory_order_acquire)) {}
                     std::copy(_timestampsAndAreIncreases.begin(), _timestampsAndAreIncreases.end(), _duplicatedTimestampsAndAreIncreases.begin());
                     _duplicatedCurrentTimestamp = _currentTimestamp;
                     _accessingTimestampsAndAreIncreases.clear(std::memory_order_release);
 
-                    // Resize the rendering area
+                    // resize the rendering area
                     glUseProgram(_programId);
                     glEnable(GL_SCISSOR_TEST);
                     glScissor(
@@ -212,7 +212,7 @@ namespace chameleon {
                         static_cast<GLsizei>(_paintArea.height())
                     );
 
-                    // Send varying data to the GPU
+                    // send varying data to the GPU
                     glEnableVertexAttribArray(_coordinatesLocation);
                     glEnableVertexAttribArray(_timestampAndIsIncreaseLocation);
                     glVertexAttribPointer(_coordinatesLocation, 2, GL_FLOAT, GL_FALSE, 0, _coordinates.data());

@@ -119,7 +119,7 @@ namespace chameleon {
                 if (!_programSetup) {
                     _programSetup = true;
 
-                    // Compile the vertex shader
+                    // compile the vertex shader
                     const auto vertexShaderId = glCreateShader(GL_VERTEX_SHADER);
                     {
                         const auto vertexShader = std::string(
@@ -141,8 +141,8 @@ namespace chameleon {
                             "    exposure = clamp(slope * log(timeDelta) + intercept, 0.0, 1.0);"
                             "}"
                         );
-                        auto vertexShaderContent = vertexShader.c_str();
-                        auto vertexShaderSize = vertexShader.size();
+                        const auto vertexShaderContent = vertexShader.c_str();
+                        const auto vertexShaderSize = vertexShader.size();
                         glShaderSource(
                             vertexShaderId,
                             1,
@@ -153,7 +153,7 @@ namespace chameleon {
                     glCompileShader(vertexShaderId);
                     checkShaderError(vertexShaderId);
 
-                    // Compile the fragment shader
+                    // compile the fragment shader
                     const auto fragmentShaderId = glCreateShader(GL_FRAGMENT_SHADER);
                     {
                         auto fragmentShader = std::string(
@@ -193,8 +193,8 @@ namespace chameleon {
                             default:
                                 throw std::logic_error("Unknown colormap id");
                         }
-                        auto fragmentShaderContent = fragmentShader.c_str();
-                        auto fragmentShaderSize = fragmentShader.size();
+                        const auto fragmentShaderContent = fragmentShader.c_str();
+                        const auto fragmentShaderSize = fragmentShader.size();
                         glShaderSource(
                             fragmentShaderId,
                             1,
@@ -205,7 +205,7 @@ namespace chameleon {
                     glCompileShader(fragmentShaderId);
                     checkShaderError(fragmentShaderId);
 
-                    // Create the shaders pipeline
+                    // create the shaders pipeline
                     _programId = glCreateProgram();
                     glAttachShader(_programId, vertexShaderId);
                     glAttachShader(_programId, fragmentShaderId);
@@ -219,21 +219,21 @@ namespace chameleon {
                     glDeleteShader(fragmentShaderId);
                     checkProgramError(_programId);
 
-                    // Set the uniform values
+                    // set the uniform values
                     glUniform1f(glGetUniformLocation(_programId, "width"), static_cast<GLfloat>(_canvasSize.width()));
                     glUniform1f(glGetUniformLocation(_programId, "height"), static_cast<GLfloat>(_canvasSize.height()));
 
-                    // Additional OpenGL settings
+                    // additional OpenGL settings
                     glDisable(GL_DEPTH_TEST);
                     checkOpenGLError();
                 } else {
 
-                    // Copy the events to minimise the strain on the event pipeline
+                    // copy the events to minimise the strain on the event pipeline
                     while (_accessingTimeDeltas.test_and_set(std::memory_order_acquire)) {}
                     std::copy(_timeDeltas.begin(), _timeDeltas.end(), _duplicatedTimeDeltas.begin());
                     _accessingTimeDeltas.clear(std::memory_order_release);
 
-                    // Resize the rendering area
+                    // resize the rendering area
                     glUseProgram(_programId);
                     glEnable(GL_SCISSOR_TEST);
                     glScissor(
@@ -264,8 +264,8 @@ namespace chameleon {
                         static_cast<GLsizei>(_paintArea.height())
                     );
 
-                    // Retrieve the discards
-                    // Calculate the discards if automatic calibration is enabled (both discards are zero)
+                    // retrieve the discards
+                    // calculate the discards if automatic calibration is enabled (both discards are zero)
                     while (_accessingDiscards.test_and_set(std::memory_order_acquire)) {}
                     if (_automaticCalibration) {
                         auto previousDiscards = _discards;
@@ -311,7 +311,7 @@ namespace chameleon {
                     }
                     _accessingDiscards.clear(std::memory_order_release);
 
-                    // Send varying data to the GPU
+                    // send varying data to the GPU
                     glEnableVertexAttribArray(_coordinatesLocation);
                     glEnableVertexAttribArray(_timeDeltaLocation);
                     glVertexAttribPointer(_coordinatesLocation, 2, GL_FLOAT, GL_FALSE, 0, _coordinates.data());

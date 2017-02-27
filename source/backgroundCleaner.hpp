@@ -44,7 +44,8 @@ namespace chameleon {
                     glLinkProgram(_programId);
                     glUseProgram(_programId);
                 } else {
-                    // Resize the rendering area
+
+                    // resize the rendering area
                     glUseProgram(_programId);
                     glEnable(GL_SCISSOR_TEST);
                     glScissor(
