@@ -1,7 +1,7 @@
 #pragma once
 
 #include <QtQuick/qquickwindow.h>
-#include <QtGui/QOpenGLFunctions>
+#include <QtGui/QOpenGLFunctions_3_3_Core>
 #include <QtQuick/QQuickItem>
 #include <QtGui/QOpenGLContext>
 
@@ -11,13 +11,14 @@
 #include <algorithm>
 #include <limits>
 #include <cmath>
+#include <array>
 #include <vector>
 
 /// chameleon provides Qt components for event stream display.
 namespace chameleon {
 
     /// LogarithmicDisplayRenderer handles openGL calls for a display.
-    class LogarithmicDisplayRenderer : public QObject, public QOpenGLFunctions {
+    class LogarithmicDisplayRenderer : public QObject, public QOpenGLFunctions_3_3_Core {
         Q_OBJECT
         public:
             LogarithmicDisplayRenderer(
@@ -67,7 +68,10 @@ namespace chameleon {
             LogarithmicDisplayRenderer(LogarithmicDisplayRenderer&&) = default;
             LogarithmicDisplayRenderer& operator=(const LogarithmicDisplayRenderer&) = delete;
             LogarithmicDisplayRenderer& operator=(LogarithmicDisplayRenderer&&) = default;
-            virtual ~LogarithmicDisplayRenderer() {}
+            virtual ~LogarithmicDisplayRenderer() {
+                glDeleteBuffers(2, _vertexBuffersIds.data());
+                glDeleteVertexArrays(1, &_vertexArrayId);
+            }
 
             /// setRenderingArea defines the rendering area.
             virtual void setRenderingArea(const QRectF& clearArea, const QRectF& paintArea, const int& windowHeight) {
@@ -115,7 +119,9 @@ namespace chameleon {
 
             /// paint sends commands to the GPU.
             void paint() {
-                initializeOpenGLFunctions();
+                if (!initializeOpenGLFunctions()) {
+                    throw std::runtime_error("initializing the OpenGL context failed");
+                }
                 if (!_programSetup) {
                     _programSetup = true;
 
@@ -123,26 +129,26 @@ namespace chameleon {
                     const auto vertexShaderId = glCreateShader(GL_VERTEX_SHADER);
                     {
                         const auto vertexShader = std::string(
-                            "#version 120\n"
-                            "attribute vec2 coordinates;"
-                            "attribute float timeDelta;"
-                            "varying float exposure;"
-                            "uniform float width;"
-                            "uniform float height;"
-                            "uniform float slope;"
-                            "uniform float intercept;"
-                            "void main() {"
-                            "    gl_Position = vec4("
-                            "        coordinates.x / (width - 1.0) * 2.0 - 1.0,"
-                            "        coordinates.y / (height - 1.0) * 2.0 - 1.0,"
-                            "        0.0,"
-                            "        1.0"
-                            "    );"
-                            "    exposure = clamp(slope * log(timeDelta) + intercept, 0.0, 1.0);"
+                            "#version 330 core\n"
+                            "in vec2 coordinates;\n"
+                            "in float timeDelta;\n"
+                            "out float exposure;\n"
+                            "uniform float width;\n"
+                            "uniform float height;\n"
+                            "uniform float slope;\n"
+                            "uniform float intercept;\n"
+                            "void main() {\n"
+                            "    gl_Position = vec4(\n"
+                            "        coordinates.x / (width - 1.0) * 2.0 - 1.0,\n"
+                            "        coordinates.y / (height - 1.0) * 2.0 - 1.0,\n"
+                            "        0.0,\n"
+                            "        1.0\n"
+                            "    );\n"
+                            "    exposure = clamp(slope * log(timeDelta) + intercept, 0.0, 1.0);\n"
                             "}"
                         );
-                        const auto vertexShaderContent = vertexShader.c_str();
-                        const auto vertexShaderSize = vertexShader.size();
+                        auto vertexShaderContent = vertexShader.c_str();
+                        auto vertexShaderSize = vertexShader.size();
                         glShaderSource(
                             vertexShaderId,
                             1,
@@ -157,44 +163,45 @@ namespace chameleon {
                     const auto fragmentShaderId = glCreateShader(GL_FRAGMENT_SHADER);
                     {
                         auto fragmentShader = std::string(
-                            "#version 120\n"
-                            "varying float exposure;"
+                            "#version 330 core\n"
+                            "in float exposure;\n"
+                            "out vec4 color;\n"
                         );
                         switch (_colormap) {
                             case 0:
                                 fragmentShader.append(
-                                    "void main() {"
-                                    "    gl_FragColor = vec4(exposure, exposure, exposure, 1.0);"
-                                    "}"
+                                    "void main() {\n"
+                                    "    color = vec4(exposure, exposure, exposure, 1.0);\n"
+                                    "}\n"
                                 );
                                 break;
                             case 1:
                                 fragmentShader.append(
-                                    "const vec4 colorTable[6] = vec4[]("
-                                    "    vec4(0.0, 0.0, 0.0, 1.0),"
-                                    "    vec4(0.5, 0.0, 0.0, 1.0),"
-                                    "    vec4(1.0, 0.0, 0.0, 1.0),"
-                                    "    vec4(1.0, 0.5, 0.0, 1.0),"
-                                    "    vec4(1.0, 1.0, 0.0, 1.0),"
-                                    "    vec4(1.0, 1.0, 1.0, 1.0)"
-                                    ");"
-                                    "void main() {"
-                                    "    float floatIndex = exposure * 5.0;"
-                                    "    int integerIndex = int(floatIndex);"
-                                    "    if (floatIndex == integerIndex) {"
-                                    "        gl_FragColor = colorTable[integerIndex];"
-                                    "    } else {"
-                                    "        gl_FragColor = (colorTable[integerIndex + 1] - colorTable[integerIndex]) * (floatIndex - integerIndex)"
-                                    "            + colorTable[integerIndex];"
-                                    "    }"
-                                    "}"
+                                    "const vec4 colorTable[6] = vec4[](\n"
+                                    "    vec4(0.0, 0.0, 0.0, 1.0),\n"
+                                    "    vec4(0.5, 0.0, 0.0, 1.0),\n"
+                                    "    vec4(1.0, 0.0, 0.0, 1.0),\n"
+                                    "    vec4(1.0, 0.5, 0.0, 1.0),\n"
+                                    "    vec4(1.0, 1.0, 0.0, 1.0),\n"
+                                    "    vec4(1.0, 1.0, 1.0, 1.0)\n"
+                                    ");\n"
+                                    "void main() {\n"
+                                    "    float floatIndex = exposure * 5.0;\n"
+                                    "    int integerIndex = int(floatIndex);\n"
+                                    "    if (floatIndex == integerIndex) {\n"
+                                    "        color = colorTable[integerIndex];\n"
+                                    "    } else {\n"
+                                    "        color = (colorTable[integerIndex + 1] - colorTable[integerIndex]) * (floatIndex - integerIndex)\n"
+                                    "            + colorTable[integerIndex];\n"
+                                    "    }\n"
+                                    "}\n"
                                 );
                                 break;
                             default:
                                 throw std::logic_error("Unknown colormap id");
                         }
-                        const auto fragmentShaderContent = fragmentShader.c_str();
-                        const auto fragmentShaderSize = fragmentShader.size();
+                        auto fragmentShaderContent = fragmentShader.c_str();
+                        auto fragmentShaderSize = fragmentShader.size();
                         glShaderSource(
                             fragmentShaderId,
                             1,
@@ -210,28 +217,77 @@ namespace chameleon {
                     glAttachShader(_programId, vertexShaderId);
                     glAttachShader(_programId, fragmentShaderId);
                     glLinkProgram(_programId);
-                    glUseProgram(_programId);
-                    _coordinatesLocation = glGetAttribLocation(_programId, "coordinates");
-                    _timeDeltaLocation = glGetAttribLocation(_programId, "timeDelta");
-                    _slopeLocation = glGetUniformLocation(_programId, "slope");
-                    _interceptLocation = glGetUniformLocation(_programId, "intercept");
                     glDeleteShader(vertexShaderId);
                     glDeleteShader(fragmentShaderId);
+                    glUseProgram(_programId);
                     checkProgramError(_programId);
+
+                    // create the vertex buffer objects
+                    glGenBuffers(3, _vertexBuffersIds.data());
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<0>(_vertexBuffersIds));
+                    glBufferData(
+                        GL_ARRAY_BUFFER,
+                        _coordinates.size() * sizeof(decltype(_coordinates)::value_type),
+                        _coordinates.data(),
+                        GL_STATIC_DRAW
+                    );
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertexBuffersIds));
+                    glBufferData(
+                        GL_ARRAY_BUFFER,
+                        _duplicatedTimeDeltas.size() * sizeof(decltype(_duplicatedTimeDeltas)::value_type),
+                        _duplicatedTimeDeltas.data(),
+                        GL_DYNAMIC_DRAW
+                    );
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertexBuffersIds));
+                    glBufferData(
+                        GL_ELEMENT_ARRAY_BUFFER,
+                        _indices.size() * sizeof(decltype(_indices)::value_type),
+                        _indices.data(),
+                        GL_STATIC_DRAW
+                    );
+
+                    // create the vertex array object
+                    glGenVertexArrays(1, &_vertexArrayId);
+                    glBindVertexArray(_vertexArrayId);
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<0>(_vertexBuffersIds));
+                    glEnableVertexAttribArray(glGetAttribLocation(_programId, "coordinates"));
+                    glVertexAttribPointer(glGetAttribLocation(_programId, "coordinates"), 2, GL_FLOAT, GL_FALSE, 0, 0);
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertexBuffersIds));
+                    glEnableVertexAttribArray(glGetAttribLocation(_programId, "timeDelta"));
+                    glVertexAttribPointer(glGetAttribLocation(_programId, "timeDelta"), 1, GL_FLOAT, GL_FALSE, 0, 0);
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertexBuffersIds));
+                    glBindVertexArray(0);
 
                     // set the uniform values
                     glUniform1f(glGetUniformLocation(_programId, "width"), static_cast<GLfloat>(_canvasSize.width()));
                     glUniform1f(glGetUniformLocation(_programId, "height"), static_cast<GLfloat>(_canvasSize.height()));
+                    _slopeLocation = glGetUniformLocation(_programId, "slope");
+                    _interceptLocation = glGetUniformLocation(_programId, "intercept");
 
                     // additional OpenGL settings
                     glDisable(GL_DEPTH_TEST);
-                    checkOpenGLError();
                 } else {
 
                     // copy the events to minimise the strain on the event pipeline
                     while (_accessingTimeDeltas.test_and_set(std::memory_order_acquire)) {}
                     std::copy(_timeDeltas.begin(), _timeDeltas.end(), _duplicatedTimeDeltas.begin());
                     _accessingTimeDeltas.clear(std::memory_order_release);
+
+                    // send data to the GPU
+                    glUseProgram(_programId);
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertexBuffersIds));
+                    glBufferData(
+                        GL_ARRAY_BUFFER,
+                        _duplicatedTimeDeltas.size() * sizeof(decltype(_duplicatedTimeDeltas)::value_type),
+                        nullptr,
+                        GL_DYNAMIC_DRAW
+                    );
+                    glBufferSubData(
+                        GL_ARRAY_BUFFER,
+                        0,
+                        _duplicatedTimeDeltas.size() * sizeof(decltype(_duplicatedTimeDeltas)::value_type),
+                        _duplicatedTimeDeltas.data()
+                    );
 
                     // resize the rendering area
                     glUseProgram(_programId);
@@ -251,13 +307,6 @@ namespace chameleon {
                     glClear(GL_COLOR_BUFFER_BIT);
                     glDisable(GL_SCISSOR_TEST);
                     glViewport(
-                        static_cast<GLint>(_paintArea.left()),
-                        static_cast<GLint>(_paintArea.top()),
-                        static_cast<GLsizei>(_paintArea.width()),
-                        static_cast<GLsizei>(_paintArea.height())
-                    );
-                    glEnable(GL_SCISSOR_TEST);
-                    glScissor(
                         static_cast<GLint>(_paintArea.left()),
                         static_cast<GLint>(_paintArea.top()),
                         static_cast<GLsizei>(_paintArea.width()),
@@ -312,13 +361,11 @@ namespace chameleon {
                     _accessingDiscards.clear(std::memory_order_release);
 
                     // send varying data to the GPU
-                    glEnableVertexAttribArray(_coordinatesLocation);
-                    glEnableVertexAttribArray(_timeDeltaLocation);
-                    glVertexAttribPointer(_coordinatesLocation, 2, GL_FLOAT, GL_FALSE, 0, _coordinates.data());
-                    glVertexAttribPointer(_timeDeltaLocation, 1, GL_FLOAT, GL_FALSE, 0, _duplicatedTimeDeltas.data());
-                    glDrawElements(GL_TRIANGLE_STRIP, _indices.size(),  GL_UNSIGNED_INT, _indices.data());
-                    glDisable(GL_SCISSOR_TEST);
+                    glBindVertexArray(_vertexArrayId);
+                    glDrawElements(GL_TRIANGLE_STRIP, _indices.size(), GL_UNSIGNED_INT, nullptr);
+                    glBindVertexArray(0);
                 }
+                checkOpenGLError();
             }
 
         protected:
@@ -382,10 +429,10 @@ namespace chameleon {
             std::atomic_flag _accessingDiscards;
             bool _discardsChanged;
             bool _automaticCalibration;
-            GLuint _programId;
             bool _programSetup;
-            GLuint _coordinatesLocation;
-            GLuint _timeDeltaLocation;
+            GLuint _programId;
+            GLuint _vertexArrayId;
+            std::array<GLuint, 3> _vertexBuffersIds;
             GLuint _slopeLocation;
             GLuint _interceptLocation;
     };
@@ -444,7 +491,7 @@ namespace chameleon {
             /// If both the black and white discards are zero (default), the discards are computed automatically.
             virtual void setDiscards(QVector2D discards) {
                 while (_accessingRenderer.test_and_set(std::memory_order_acquire)) {}
-                if (_rendererReady.load(std::memory_order_acquire)) {
+                if (_rendererReady.load(std::memory_order_relaxed)) {
                     _logarithmicDisplayRenderer->setDiscards(discards);
                 } else {
                     _discardsToLoad = discards;
@@ -552,8 +599,8 @@ namespace chameleon {
                         );
                         while (_accessingRenderer.test_and_set(std::memory_order_acquire)) {}
                         _logarithmicDisplayRenderer->setDiscards(_discardsToLoad);
-                        _accessingRenderer.clear(std::memory_order_release);
                         _rendererReady.store(true, std::memory_order_release);
+                        _accessingRenderer.clear(std::memory_order_release);
                     }
                     auto clearArea = QRectF(0, 0, width() * window()->devicePixelRatio(), height() * window()->devicePixelRatio());
                     for (auto item = static_cast<QQuickItem*>(this); item; item = item->parentItem()) {

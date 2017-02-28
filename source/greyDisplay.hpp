@@ -2,7 +2,7 @@
 
 #include <QVector3D>
 #include <QtQuick/qquickwindow.h>
-#include <QtGui/QOpenGLFunctions>
+#include <QtGui/QOpenGLFunctions_3_3_Core>
 #include <QtQuick/QQuickItem>
 #include <QtGui/QOpenGLContext>
 
@@ -19,7 +19,7 @@
 namespace chameleon {
 
     /// GreyDisplayRenderer handles openGL calls for a GreyDisplay.
-    class GreyDisplayRenderer : public QObject, public QOpenGLFunctions {
+    class GreyDisplayRenderer : public QObject, public QOpenGLFunctions_3_3_Core {
         Q_OBJECT
         public:
             GreyDisplayRenderer(const QSize& canvasSize, const QColor& backgroundColor):
@@ -59,7 +59,10 @@ namespace chameleon {
             GreyDisplayRenderer(GreyDisplayRenderer&&) = default;
             GreyDisplayRenderer& operator=(const GreyDisplayRenderer&) = delete;
             GreyDisplayRenderer& operator=(GreyDisplayRenderer&&) = default;
-            virtual ~GreyDisplayRenderer() {}
+            virtual ~GreyDisplayRenderer() {
+                glDeleteBuffers(2, _vertexBuffersIds.data());
+                glDeleteVertexArrays(1, &_vertexArrayId);
+            }
 
             /// setRenderingArea defines the rendering area.
             virtual void setRenderingArea(const QRectF& clearArea, const QRectF& paintArea, const int& windowHeight) {
@@ -82,7 +85,9 @@ namespace chameleon {
 
             /// paint sends commands to the GPU.
             void paint() {
-                initializeOpenGLFunctions();
+                if (!initializeOpenGLFunctions()) {
+                    throw std::runtime_error("initializing the OpenGL context failed");
+                }
                 if (!_programSetup) {
                     _programSetup = true;
 
@@ -90,24 +95,24 @@ namespace chameleon {
                     const auto vertexShaderId = glCreateShader(GL_VERTEX_SHADER);
                     {
                         const auto vertexShader = std::string(
-                            "#version 120\n"
-                            "attribute vec2 coordinates;"
-                            "attribute float exposure;"
-                            "varying float fragmentExposure;"
-                            "uniform float width;"
-                            "uniform float height;"
-                            "void main() {"
-                            "    gl_Position = vec4("
-                            "        coordinates.x / (width - 1.0) * 2.0 - 1.0,"
-                            "        coordinates.y / (height - 1.0) * 2.0 - 1.0,"
-                            "        0.0,"
-                            "        1.0"
-                            "    );"
-                            "    fragmentExposure = exposure;"
-                            "}"
+                            "#version 330 core\n"
+                            "in vec2 coordinates;\n"
+                            "in float exposure;\n"
+                            "out float fragmentExposure;\n"
+                            "uniform float width;\n"
+                            "uniform float height;\n"
+                            "void main() {\n"
+                            "    gl_Position = vec4(\n"
+                            "        coordinates.x / (width - 1.0) * 2.0 - 1.0,\n"
+                            "        coordinates.y / (height - 1.0) * 2.0 - 1.0,\n"
+                            "        0.0,\n"
+                            "        1.0\n"
+                            "    );\n"
+                            "    fragmentExposure = exposure;\n"
+                            "}\n"
                         );
-                        const auto vertexShaderContent = vertexShader.c_str();
-                        const auto vertexShaderSize = vertexShader.size();
+                        auto vertexShaderContent = vertexShader.c_str();
+                        auto vertexShaderSize = vertexShader.size();
                         glShaderSource(
                             vertexShaderId,
                             1,
@@ -122,14 +127,15 @@ namespace chameleon {
                     const auto fragmentShaderId = glCreateShader(GL_FRAGMENT_SHADER);
                     {
                         const auto fragmentShader = std::string(
-                            "#version 120\n"
-                            "varying float fragmentExposure;"
-                            "void main() {"
-                            "    gl_FragColor = vec4(fragmentExposure, fragmentExposure, fragmentExposure, 1.0);"
-                            "}"
+                            "#version 330 core\n"
+                            "in float fragmentExposure;\n"
+                            "out vec4 color;\n"
+                            "void main() {\n"
+                            "    color = vec4(fragmentExposure, fragmentExposure, fragmentExposure, 1.0);\n"
+                            "}\n"
                         );
-                        const auto fragmentShaderContent = fragmentShader.c_str();
-                        const auto fragmentShaderSize = fragmentShader.size();
+                        auto fragmentShaderContent = fragmentShader.c_str();
+                        auto fragmentShaderSize = fragmentShader.size();
                         glShaderSource(
                             fragmentShaderId,
                             1,
@@ -145,12 +151,46 @@ namespace chameleon {
                     glAttachShader(_programId, vertexShaderId);
                     glAttachShader(_programId, fragmentShaderId);
                     glLinkProgram(_programId);
-                    glUseProgram(_programId);
-                    _coordinatesLocation = glGetAttribLocation(_programId, "coordinates");
-                    _exposureLocation = glGetAttribLocation(_programId, "exposure");
                     glDeleteShader(vertexShaderId);
                     glDeleteShader(fragmentShaderId);
+                    glUseProgram(_programId);
                     checkProgramError(_programId);
+
+                    // create the vertex buffer objects
+                    glGenBuffers(3, _vertexBuffersIds.data());
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<0>(_vertexBuffersIds));
+                    glBufferData(
+                        GL_ARRAY_BUFFER,
+                        _coordinates.size() * sizeof(decltype(_coordinates)::value_type),
+                        _coordinates.data(),
+                        GL_STATIC_DRAW
+                    );
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertexBuffersIds));
+                    glBufferData(
+                        GL_ARRAY_BUFFER,
+                        _duplicatedExposures.size() * sizeof(decltype(_duplicatedExposures)::value_type),
+                        _duplicatedExposures.data(),
+                        GL_DYNAMIC_DRAW
+                    );
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertexBuffersIds));
+                    glBufferData(
+                        GL_ELEMENT_ARRAY_BUFFER,
+                        _indices.size() * sizeof(decltype(_indices)::value_type),
+                        _indices.data(),
+                        GL_STATIC_DRAW
+                    );
+
+                    // create the vertex array object
+                    glGenVertexArrays(1, &_vertexArrayId);
+                    glBindVertexArray(_vertexArrayId);
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<0>(_vertexBuffersIds));
+                    glEnableVertexAttribArray(glGetAttribLocation(_programId, "coordinates"));
+                    glVertexAttribPointer(glGetAttribLocation(_programId, "coordinates"), 2, GL_FLOAT, GL_FALSE, 0, 0);
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertexBuffersIds));
+                    glEnableVertexAttribArray(glGetAttribLocation(_programId, "exposure"));
+                    glVertexAttribPointer(glGetAttribLocation(_programId, "exposure"), 1, GL_FLOAT, GL_FALSE, 0, 0);
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertexBuffersIds));
+                    glBindVertexArray(0);
 
                     // set the uniform values
                     glUniform1f(glGetUniformLocation(_programId, "width"), static_cast<GLfloat>(_canvasSize.width()));
@@ -158,13 +198,28 @@ namespace chameleon {
 
                     // additional OpenGL settings
                     glDisable(GL_DEPTH_TEST);
-                    checkOpenGLError();
                 } else {
 
                     // copy the events to minimise the strain on the event pipeline
                     while (_accessingExposures.test_and_set(std::memory_order_acquire)) {}
                     std::copy(_exposures.begin(), _exposures.end(), _duplicatedExposures.begin());
                     _accessingExposures.clear(std::memory_order_release);
+
+                    // send data to the GPU
+                    glUseProgram(_programId);
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertexBuffersIds));
+                    glBufferData(
+                        GL_ARRAY_BUFFER,
+                        _duplicatedExposures.size() * sizeof(decltype(_duplicatedExposures)::value_type),
+                        nullptr,
+                        GL_DYNAMIC_DRAW
+                    );
+                    glBufferSubData(
+                        GL_ARRAY_BUFFER,
+                        0,
+                        _duplicatedExposures.size() * sizeof(decltype(_duplicatedExposures)::value_type),
+                        _duplicatedExposures.data()
+                    );
 
                     // resize the rendering area
                     glUseProgram(_programId);
@@ -189,22 +244,13 @@ namespace chameleon {
                         static_cast<GLsizei>(_paintArea.width()),
                         static_cast<GLsizei>(_paintArea.height())
                     );
-                    glEnable(GL_SCISSOR_TEST);
-                    glScissor(
-                        static_cast<GLint>(_paintArea.left()),
-                        static_cast<GLint>(_paintArea.top()),
-                        static_cast<GLsizei>(_paintArea.width()),
-                        static_cast<GLsizei>(_paintArea.height())
-                    );
 
                     // send varying data to the GPU
-                    glEnableVertexAttribArray(_coordinatesLocation);
-                    glEnableVertexAttribArray(_exposureLocation);
-                    glVertexAttribPointer(_coordinatesLocation, 2, GL_FLOAT, GL_FALSE, 0, _coordinates.data());
-                    glVertexAttribPointer(_exposureLocation, 1, GL_FLOAT, GL_FALSE, 0, _duplicatedExposures.data());
-                    glDrawElements(GL_TRIANGLE_STRIP, _indices.size(),  GL_UNSIGNED_INT, _indices.data());
-                    glDisable(GL_SCISSOR_TEST);
+                    glBindVertexArray(_vertexArrayId);
+                    glDrawElements(GL_TRIANGLE_STRIP, _indices.size(), GL_UNSIGNED_INT, nullptr);
+                    glBindVertexArray(0);
                 }
+                checkOpenGLError();
             }
 
         protected:
@@ -262,10 +308,10 @@ namespace chameleon {
             std::atomic_flag _accessingExposures;
             QRectF _clearArea;
             QRectF _paintArea;
-            GLuint _programId;
             bool _programSetup;
-            GLuint _coordinatesLocation;
-            GLuint _exposureLocation;
+            GLuint _programId;
+            GLuint _vertexArrayId;
+            std::array<GLuint, 3> _vertexBuffersIds;
     };
 
     /// GreyDisplay displays a stream of events without tone-mapping.
