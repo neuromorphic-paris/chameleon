@@ -1,74 +1,62 @@
-#pragma once
+ #pragma once
 
+#include <QVector3D>
 #include <QtQuick/qquickwindow.h>
 #include <QtGui/QOpenGLFunctions_3_3_Core>
 #include <QtQuick/QQuickItem>
 #include <QtGui/QOpenGLContext>
 
 #include <memory>
+#include <stdexcept>
 #include <atomic>
+#include <algorithm>
 #include <limits>
+#include <cmath>
 #include <array>
 #include <vector>
-#include <stdexcept>
 
 /// chameleon provides Qt components for event stream display.
 namespace chameleon {
 
-    /// ChangeDetectionDisplayRenderer handles openGL calls for a display.
-    class ChangeDetectionDisplayRenderer : public QObject, public QOpenGLFunctions_3_3_Core {
+    /// FlowDisplayRenderer handles openGL calls for a FlowDisplay.
+    class FlowDisplayRenderer : public QObject, public QOpenGLFunctions_3_3_Core {
         Q_OBJECT
         public:
-            ChangeDetectionDisplayRenderer(const QSize& canvasSize, const float& decay, const QColor& backgroundColor) :
+            FlowDisplayRenderer(const QSize& canvasSize, const float& lengthToSpeedRatio, const float& decay):
                 _canvasSize(canvasSize),
+                _lengthToSpeedRatio(lengthToSpeedRatio),
                 _decay(decay),
-                _backgroundColor(backgroundColor),
-                _currentTimestamp(0),
-                _duplicatedTimestampsAndAreIncreases(_canvasSize.width() * _canvasSize.height() * 2),
+                _duplicatedTimestampsAndFlows(_canvasSize.width() * _canvasSize.height() * 3),
                 _programSetup(false)
             {
-                _indices.reserve(static_cast<std::size_t>(
-                    2 * (_canvasSize.width() * _canvasSize.height() - _canvasSize.width() + _canvasSize.height() - 2)
-                ));
-                for (qint32 y = 0; y < _canvasSize.height() - 1; ++y) {
-                    if (y > 0) {
-                        _indices.push_back(y * _canvasSize.width());
-                    }
-
-                    for (qint32 x = 0; x < _canvasSize.width(); ++x) {
-                        _indices.push_back(x + y * _canvasSize.width());
-                        _indices.push_back(x + (y + 1) * _canvasSize.width());
-                    }
-
-                    if (y < _canvasSize.height() - 2) {
-                        _indices.push_back(_canvasSize.width() - 1 + (y + 1) * _canvasSize.width());
-                    }
-                }
+                _indices.reserve(_canvasSize.width() * _canvasSize.height());
                 _coordinates.reserve(_canvasSize.width() * _canvasSize.height() * 2);
-                _timestampsAndAreIncreases.reserve(_canvasSize.width() * _canvasSize.height() * 2);
+                _timestampsAndFlows.reserve(_canvasSize.width() * _canvasSize.height() * 3);
                 for (qint32 y = 0; y < _canvasSize.height(); ++y) {
                     for (qint32 x = 0; x < _canvasSize.width(); ++x) {
+                        _indices.push_back(x + y * _canvasSize.width());
                         _coordinates.push_back(static_cast<float>(x));
                         _coordinates.push_back(static_cast<float>(y));
-                        _timestampsAndAreIncreases.push_back(-std::numeric_limits<float>::infinity());
-                        _timestampsAndAreIncreases.push_back(static_cast<float>(1.0));
+                        _timestampsAndFlows.push_back(-std::numeric_limits<float>::infinity());
+                        _timestampsAndFlows.push_back(static_cast<float>(0.0));
+                        _timestampsAndFlows.push_back(static_cast<float>(0.0));
                     }
                 }
-                _accessingTimestampsAndAreIncreases.clear(std::memory_order_release);
+
+
+                _accessingFlows.clear(std::memory_order_release);
             }
-            ChangeDetectionDisplayRenderer(const ChangeDetectionDisplayRenderer&) = delete;
-            ChangeDetectionDisplayRenderer(ChangeDetectionDisplayRenderer&&) = default;
-            ChangeDetectionDisplayRenderer& operator=(const ChangeDetectionDisplayRenderer&) = delete;
-            ChangeDetectionDisplayRenderer& operator=(ChangeDetectionDisplayRenderer&&) = default;
-            virtual ~ChangeDetectionDisplayRenderer() {
+            FlowDisplayRenderer(const FlowDisplayRenderer&) = delete;
+            FlowDisplayRenderer(FlowDisplayRenderer&&) = default;
+            FlowDisplayRenderer& operator=(const FlowDisplayRenderer&) = delete;
+            FlowDisplayRenderer& operator=(FlowDisplayRenderer&&) = default;
+            virtual ~FlowDisplayRenderer() {
                 glDeleteBuffers(2, _vertexBuffersIds.data());
                 glDeleteVertexArrays(1, &_vertexArrayId);
             }
 
             /// setRenderingArea defines the rendering area.
-            virtual void setRenderingArea(const QRectF& clearArea, const QRectF& paintArea, const int& windowHeight) {
-                _clearArea = clearArea;
-                _clearArea.moveTop(windowHeight - _clearArea.top() - _clearArea.height());
+            virtual void setRenderingArea(const QRectF& paintArea, const int& windowHeight) {
                 _paintArea = paintArea;
                 _paintArea.moveTop(windowHeight - _paintArea.top() - _paintArea.height());
             }
@@ -76,12 +64,13 @@ namespace chameleon {
             /// push adds an event to the display.
             template<typename Event>
             void push(Event event) {
-                const auto index = (static_cast<std::size_t>(event.x) + static_cast<std::size_t>(event.y) * _canvasSize.width()) * 2;
-                while (_accessingTimestampsAndAreIncreases.test_and_set(std::memory_order_acquire)) {}
+                const auto index = (static_cast<std::size_t>(event.x) + static_cast<std::size_t>(event.y) * _canvasSize.width()) * 3;
+                while (_accessingFlows.test_and_set(std::memory_order_acquire)) {}
                 _currentTimestamp = event.timestamp;
-                _timestampsAndAreIncreases[index] = static_cast<float>(event.timestamp);
-                _timestampsAndAreIncreases[index + 1] = event.isIncrease ? 1.0 : 0.0;
-                _accessingTimestampsAndAreIncreases.clear(std::memory_order_release);
+                _timestampsAndFlows[index] = static_cast<float>(event.timestamp);
+                _timestampsAndFlows[index + 1] = static_cast<float>(event.vx);
+                _timestampsAndFlows[index + 2] = static_cast<float>(event.vy);
+                _accessingFlows.clear(std::memory_order_release);
             }
 
         public slots:
@@ -100,29 +89,19 @@ namespace chameleon {
                         const auto vertexShader = std::string(
                             "#version 330 core\n"
                             "in vec2 coordinates;\n"
-                            "in vec2 timestampAndIsIncrease;\n"
-                            "out float exposure;\n"
+                            "in vec3 timestampAndFlow;\n"
+                            "out vec3 geometryTimestampAndFlow;"
                             "uniform float width;\n"
                             "uniform float height;\n"
-                            "uniform float decay;\n"
-                            "uniform float currentTimestamp;\n"
                             "void main() {\n"
                             "    gl_Position = vec4(\n"
-                            "        coordinates.x / (width - 1.0) * 2.0 - 1.0,\n"
-                            "        coordinates.y / (height - 1.0) * 2.0 - 1.0,\n"
+                            "        coordinates.x,\n"
+                            "        coordinates.y,\n"
                             "        0.0,\n"
                             "        1.0\n"
                             "    );\n"
-                            "    if (timestampAndIsIncrease.x > currentTimestamp) {\n"
-                            "        exposure = 0.5;\n"
-                            "    } else {\n"
-                            "        if (timestampAndIsIncrease.y > 0.5) {\n"
-                            "            exposure = 0.5 * exp(-(currentTimestamp - timestampAndIsIncrease.x) / decay) + 0.5;\n"
-                            "        } else {\n"
-                            "            exposure = 0.5 - 0.5 * exp(-(currentTimestamp - timestampAndIsIncrease.x) / decay);\n"
-                            "        }\n"
-                            "    }\n"
-                            "}\n"
+                            "    geometryTimestampAndFlow = timestampAndFlow;\n"
+                            "}"
                         );
                         auto vertexShaderContent = vertexShader.c_str();
                         auto vertexShaderSize = vertexShader.size();
@@ -136,15 +115,89 @@ namespace chameleon {
                     glCompileShader(vertexShaderId);
                     checkShaderError(vertexShaderId);
 
+                    // compile the geometry shader
+                    const auto geometryShaderId = glCreateShader(GL_GEOMETRY_SHADER);
+                    {
+                        const auto geometryShader = std::string(
+                            "#version 330 core\n"
+                            "#define flowDisplayPi 3.1415926535897932384626433832795\n"
+                            "layout (points) in;\n"
+                            "layout (line_strip, max_vertices = 5) out;\n"
+                            "in vec3 geometryTimestampAndFlow[];\n"
+                            "out vec4 fragmentColor;\n"
+                            "uniform float width;\n"
+                            "uniform float height;\n"
+                            "uniform float lengthToSpeedRatio;\n"
+                            "uniform float decay;\n"
+                            "uniform float currentTimestamp;\n"
+                            "const vec3 colorTable[7] = vec3[](\n"
+                            "    vec3(1.0, 1.0, 0.0),\n"
+                            "    vec3(0.0, 1.0, 0.0),\n"
+                            "    vec3(0.0, 1.0, 1.0),\n"
+                            "    vec3(0.0, 0.0, 1.0),\n"
+                            "    vec3(1.0, 0.0, 1.0),\n"
+                            "    vec3(1.0, 0.0, 0.0),\n"
+                            "    vec3(1.0, 1.0, 0.0)\n"
+                            ");\n"
+                            "void main() {\n"
+                            "    if (geometryTimestampAndFlow[0].x > currentTimestamp) {\n"
+                            "        return;\n"
+                            "    }\n"
+                            "    vec2 speedVector = vec2(geometryTimestampAndFlow[0].y, geometryTimestampAndFlow[0].z) * lengthToSpeedRatio;\n"
+                            "    float speed = length(speedVector);\n"
+                            "    if (speed == 0) {\n"
+                            "        return;\n"
+                            "    }\n"
+                            "    float alpha = exp(-(currentTimestamp - geometryTimestampAndFlow[0].x) / decay);\n"
+                            "    float floatIndex = clamp(atan(speedVector.y, speedVector.x) / (2 * flowDisplayPi) + 0.5, 0.0, 1.0) * 6.0;\n"
+                            "    int integerIndex = int(floatIndex);\n"
+                            "    if (floatIndex == integerIndex) {\n"
+                            "        fragmentColor = vec4(colorTable[integerIndex], alpha);\n"
+                            "    } else {\n"
+                            "        fragmentColor = vec4(mix(colorTable[integerIndex], colorTable[integerIndex + 1], floatIndex - integerIndex), alpha);\n"
+                            "    }\n"
+                            "    vec2 origin = vec2(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y);\n"
+                            "    vec2 tip = origin + speedVector;\n"
+                            "    vec2 arrowProjection = origin + (1.0 - 3.0 / speed) * speedVector;\n"
+                            "    vec2 arrowHeight = 3.0 / speed * sqrt(\n"
+                            "        (pow(speedVector.x, 2) + pow(speedVector.y, 2)) / (3 * pow(speedVector.x, 2) + pow(speedVector.y, 2))\n"
+                            "    ) * vec2(speedVector.y, -speedVector.x);\n"
+                            "    vec2 firstBranch = arrowProjection + arrowHeight;\n"
+                            "    vec2 secondBranch = arrowProjection - arrowHeight;\n"
+                            "    gl_Position = vec4(origin.x / (width - 1.0) * 2.0 - 1.0, origin.y / (height - 1.0) * 2.0 - 1.0, 0.0, 1.0);\n"
+                            "    EmitVertex();\n"
+                            "    gl_Position = vec4(tip.x / (width - 1.0) * 2.0 - 1.0, tip.y / (height - 1.0) * 2.0 - 1.0, 0.0, 1.0);\n"
+                            "    EmitVertex();\n"
+                            "    EndPrimitive();\n"
+                            "    gl_Position = vec4(firstBranch.x / (width - 1.0) * 2.0 - 1.0, firstBranch.y / (height - 1.0) * 2.0 - 1.0, 0.0, 1.0);\n"
+                            "    EmitVertex();\n"
+                            "    gl_Position = vec4(tip.x / (width - 1.0) * 2.0 - 1.0, tip.y / (height - 1.0) * 2.0 - 1.0, 0.0, 1.0);\n"
+                            "    EmitVertex();\n"
+                            "    gl_Position = vec4(secondBranch.x / (width - 1.0) * 2.0 - 1.0, secondBranch.y / (height - 1.0) * 2.0 - 1.0, 0.0, 1.0);\n"
+                            "    EmitVertex();\n"
+                            "}\n"
+                        );
+                        auto geometryShaderContent = geometryShader.c_str();
+                        auto geometryShaderSize = geometryShader.size();
+                        glShaderSource(
+                            geometryShaderId,
+                            1,
+                            static_cast<const GLchar**>(&geometryShaderContent),
+                            reinterpret_cast<const GLint*>(&geometryShaderSize)
+                        );
+                    }
+                    glCompileShader(geometryShaderId);
+                    checkShaderError(geometryShaderId);
+
                     // compile the fragment shader
                     const auto fragmentShaderId = glCreateShader(GL_FRAGMENT_SHADER);
                     {
                         const auto fragmentShader = std::string(
                             "#version 330 core\n"
-                            "in float exposure;\n"
-                            "out vec4 color\n;"
+                            "in vec4 fragmentColor;"
+                            "out vec4 color;\n"
                             "void main() {\n"
-                            "    color = vec4(exposure, exposure, exposure, 1.0);\n"
+                            "    color = fragmentColor;\n"
                             "}\n"
                         );
                         auto fragmentShaderContent = fragmentShader.c_str();
@@ -162,9 +215,11 @@ namespace chameleon {
                     // create the shaders pipeline
                     _programId = glCreateProgram();
                     glAttachShader(_programId, vertexShaderId);
+                    glAttachShader(_programId, geometryShaderId);
                     glAttachShader(_programId, fragmentShaderId);
                     glLinkProgram(_programId);
                     glDeleteShader(vertexShaderId);
+                    glDeleteShader(geometryShaderId);
                     glDeleteShader(fragmentShaderId);
                     glUseProgram(_programId);
                     checkProgramError(_programId);
@@ -181,8 +236,8 @@ namespace chameleon {
                     glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertexBuffersIds));
                     glBufferData(
                         GL_ARRAY_BUFFER,
-                        _duplicatedTimestampsAndAreIncreases.size() * sizeof(decltype(_duplicatedTimestampsAndAreIncreases)::value_type),
-                        _duplicatedTimestampsAndAreIncreases.data(),
+                        _duplicatedTimestampsAndFlows.size() * sizeof(decltype(_duplicatedTimestampsAndFlows)::value_type),
+                        _duplicatedTimestampsAndFlows.data(),
                         GL_DYNAMIC_DRAW
                     );
                     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertexBuffersIds));
@@ -196,71 +251,62 @@ namespace chameleon {
                     // create the vertex array object
                     glGenVertexArrays(1, &_vertexArrayId);
                     glBindVertexArray(_vertexArrayId);
+
                     glBindBuffer(GL_ARRAY_BUFFER, std::get<0>(_vertexBuffersIds));
                     glEnableVertexAttribArray(glGetAttribLocation(_programId, "coordinates"));
                     glVertexAttribPointer(glGetAttribLocation(_programId, "coordinates"), 2, GL_FLOAT, GL_FALSE, 0, 0);
                     glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertexBuffersIds));
-                    glEnableVertexAttribArray(glGetAttribLocation(_programId, "timestampAndIsIncrease"));
-                    glVertexAttribPointer(glGetAttribLocation(_programId, "timestampAndIsIncrease"), 2, GL_FLOAT, GL_FALSE, 0, 0);
+                    glEnableVertexAttribArray(glGetAttribLocation(_programId, "timestampAndFlow"));
+                    glVertexAttribPointer(glGetAttribLocation(_programId, "timestampAndFlow"), 3, GL_FLOAT, GL_FALSE, 0, 0);
                     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertexBuffersIds));
                     glBindVertexArray(0);
 
                     // set the uniform values
                     glUniform1f(glGetUniformLocation(_programId, "width"), static_cast<GLfloat>(_canvasSize.width()));
                     glUniform1f(glGetUniformLocation(_programId, "height"), static_cast<GLfloat>(_canvasSize.height()));
+                    glUniform1f(glGetUniformLocation(_programId, "lengthToSpeedRatio"), static_cast<GLfloat>(_lengthToSpeedRatio));
                     glUniform1f(glGetUniformLocation(_programId, "decay"), static_cast<GLfloat>(_decay));
                     _currentTimestampLocation = glGetUniformLocation(_programId, "currentTimestamp");
                 } else {
 
                     // copy the events to minimise the strain on the event pipeline
-                    while (_accessingTimestampsAndAreIncreases.test_and_set(std::memory_order_acquire)) {}
+                    while (_accessingFlows.test_and_set(std::memory_order_acquire)) {}
                     _duplicatedCurrentTimestamp = _currentTimestamp;
-                    std::copy(_timestampsAndAreIncreases.begin(), _timestampsAndAreIncreases.end(), _duplicatedTimestampsAndAreIncreases.begin());
-                    _accessingTimestampsAndAreIncreases.clear(std::memory_order_release);
+                    std::copy(_timestampsAndFlows.begin(), _timestampsAndFlows.end(), _duplicatedTimestampsAndFlows.begin());
+                    _accessingFlows.clear(std::memory_order_release);
 
                     // send data to the GPU
                     glUseProgram(_programId);
                     glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertexBuffersIds));
                     glBufferData(
                         GL_ARRAY_BUFFER,
-                        _duplicatedTimestampsAndAreIncreases.size() * sizeof(decltype(_duplicatedTimestampsAndAreIncreases)::value_type),
+                        _duplicatedTimestampsAndFlows.size() * sizeof(decltype(_duplicatedTimestampsAndFlows)::value_type),
                         nullptr,
                         GL_DYNAMIC_DRAW
                     );
                     glBufferSubData(
                         GL_ARRAY_BUFFER,
                         0,
-                        _duplicatedTimestampsAndAreIncreases.size() * sizeof(decltype(_duplicatedTimestampsAndAreIncreases)::value_type),
-                        _duplicatedTimestampsAndAreIncreases.data()
+                        _duplicatedTimestampsAndFlows.size() * sizeof(decltype(_duplicatedTimestampsAndFlows)::value_type),
+                        _duplicatedTimestampsAndFlows.data()
                     );
 
                     // resize the rendering area
-                    glEnable(GL_SCISSOR_TEST);
-                    glScissor(
-                        static_cast<GLint>(_clearArea.left()),
-                        static_cast<GLint>(_clearArea.top()),
-                        static_cast<GLsizei>(_clearArea.width()),
-                        static_cast<GLsizei>(_clearArea.height())
-                    );
-                    glClearColor(
-                        static_cast<GLfloat>(_backgroundColor.redF()),
-                        static_cast<GLfloat>(_backgroundColor.greenF()),
-                        static_cast<GLfloat>(_backgroundColor.blueF()),
-                        static_cast<GLfloat>(_backgroundColor.alphaF())
-                    );
-                    glClear(GL_COLOR_BUFFER_BIT);
-                    glDisable(GL_SCISSOR_TEST);
+                    glUseProgram(_programId);
                     glViewport(
                         static_cast<GLint>(_paintArea.left()),
                         static_cast<GLint>(_paintArea.top()),
                         static_cast<GLsizei>(_paintArea.width()),
                         static_cast<GLsizei>(_paintArea.height())
                     );
+                    glDisable(GL_DEPTH_TEST);
+                    glEnable(GL_BLEND);
+                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
                     // send varying data to the GPU
                     glUniform1f(_currentTimestampLocation, static_cast<GLfloat>(_duplicatedCurrentTimestamp));
                     glBindVertexArray(_vertexArrayId);
-                    glDrawElements(GL_TRIANGLE_STRIP, _indices.size(), GL_UNSIGNED_INT, nullptr);
+                    glDrawElements(GL_POINTS, _indices.size(), GL_UNSIGNED_INT, nullptr);
                     glBindVertexArray(0);
                 }
                 checkOpenGLError();
@@ -292,7 +338,7 @@ namespace chameleon {
                 if (status != GL_TRUE) {
                     GLint messageLength = 0;
                     glGetShaderiv(shaderId, GL_INFO_LOG_LENGTH, &messageLength);
-                    auto errorMessage = std::vector<char>(messageLength);
+                    std::vector<char> errorMessage(messageLength);
                     glGetShaderInfoLog(shaderId, messageLength, nullptr, errorMessage.data());
                     throw std::logic_error("Shader error: " + std::string(errorMessage.data()));
                 }
@@ -313,16 +359,15 @@ namespace chameleon {
             }
 
             QSize _canvasSize;
+            float _lengthToSpeedRatio;
             float _decay;
-            QColor _backgroundColor;
             float _currentTimestamp;
             float _duplicatedCurrentTimestamp;
             std::vector<GLuint> _indices;
             std::vector<float> _coordinates;
-            std::vector<float> _timestampsAndAreIncreases;
-            std::vector<float> _duplicatedTimestampsAndAreIncreases;
-            std::atomic_flag _accessingTimestampsAndAreIncreases;
-            QRectF _clearArea;
+            std::vector<float> _timestampsAndFlows;
+            std::vector<float> _duplicatedTimestampsAndFlows;
+            std::atomic_flag _accessingFlows;
             QRectF _paintArea;
             bool _programSetup;
             GLuint _programId;
@@ -331,28 +376,27 @@ namespace chameleon {
             GLuint _currentTimestampLocation;
     };
 
-    /// ChangeDetectionDisplay displays a stream of events.
-    class ChangeDetectionDisplay : public QQuickItem {
+    /// FlowDisplay displays a stream of flow events.
+    class FlowDisplay : public QQuickItem {
         Q_OBJECT
         Q_INTERFACES(QQmlParserStatus)
         Q_PROPERTY(QSize canvasSize READ canvasSize WRITE setCanvasSize)
+        Q_PROPERTY(float lengthToSpeedRatio READ lengthToSpeedRatio WRITE setLengthToSpeedRatio)
         Q_PROPERTY(float decay READ decay WRITE setDecay)
-        Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor)
-        Q_PROPERTY(QRectF paintArea READ paintArea)
         public:
-            ChangeDetectionDisplay() :
+            FlowDisplay() :
                 _ready(false),
                 _rendererReady(false),
-                _decay(1e5),
-                _backgroundColor(Qt::black)
+                _lengthToSpeedRatio(50000),
+                _decay(100000)
             {
-                connect(this, &QQuickItem::windowChanged, this, &ChangeDetectionDisplay::handleWindowChanged);
+                connect(this, &QQuickItem::windowChanged, this, &FlowDisplay::handleWindowChanged);
             }
-            ChangeDetectionDisplay(const ChangeDetectionDisplay&) = delete;
-            ChangeDetectionDisplay(ChangeDetectionDisplay&&) = default;
-            ChangeDetectionDisplay& operator=(const ChangeDetectionDisplay&) = delete;
-            ChangeDetectionDisplay& operator=(ChangeDetectionDisplay&&) = default;
-            virtual ~ChangeDetectionDisplay() {}
+            FlowDisplay(const FlowDisplay&) = delete;
+            FlowDisplay(FlowDisplay&&) = default;
+            FlowDisplay& operator=(const FlowDisplay&) = delete;
+            FlowDisplay& operator=(FlowDisplay&&) = default;
+            virtual ~FlowDisplay() {}
 
             /// setCanvasSize defines the display coordinates.
             /// The canvas size will be passed to the openGL renderer, therefore it should only be set during qml construction.
@@ -370,7 +414,21 @@ namespace chameleon {
                 return _canvasSize;
             }
 
-            /// setDecay defines the pixel decay.
+            /// setLengthToSpeedRatio defines the length in pixels of the arrow representing a one-pixel-per-microsecond speed.
+            /// The length to speed ratio will be passed to the openGL renderer, therefore it should only be set during qml construction.
+            virtual void setLengthToSpeedRatio(float lengthToSpeedRatio) {
+                if (_ready.load(std::memory_order_acquire)) {
+                    throw std::logic_error("lengthToSpeedRatio can only be set during qml construction");
+                }
+                _lengthToSpeedRatio = lengthToSpeedRatio;
+            }
+
+            /// lengthToSpeedRatio returns the currently used lengthToSpeedRatio.
+            virtual float lengthToSpeedRatio() const {
+                return _lengthToSpeedRatio;
+            }
+
+            /// setDecay defines the flow decay.
             /// The decay will be passed to the openGL renderer, therefore it should only be set during qml construction.
             virtual void setDecay(float decay) {
                 if (_ready.load(std::memory_order_acquire)) {
@@ -384,20 +442,6 @@ namespace chameleon {
                 return _decay;
             }
 
-            /// setBackgroundColor defines the background color used to compensate the parent's shape.
-            /// The background color will be passed to the openGL renderer, therefore it should only be set during qml construction.
-            virtual void setBackgroundColor(QColor backgroundColor) {
-                if (_ready.load(std::memory_order_acquire)) {
-                    throw std::logic_error("backgroundColor can only be set during qml construction");
-                }
-                _backgroundColor = backgroundColor;
-            }
-
-            /// backgroundColor returns the currently used backgroundColor.
-            virtual QColor backgroundColor() const {
-                return _backgroundColor;
-            }
-
             /// paintArea returns the paint area in window coordinates.
             virtual QRectF paintArea() const {
                 return _paintArea;
@@ -407,7 +451,7 @@ namespace chameleon {
             template<typename Event>
             void push(Event event) {
                 if (_rendererReady.load(std::memory_order_relaxed)) {
-                    _changeDetectionDisplayRenderer->push<Event>(event);
+                    _flowDisplayRenderer->push<Event>(event);
                 }
             }
 
@@ -429,15 +473,15 @@ namespace chameleon {
             /// sync adapts the renderer to external changes.
             void sync() {
                 if (_ready.load(std::memory_order_relaxed)) {
-                    if (!_changeDetectionDisplayRenderer) {
-                        _changeDetectionDisplayRenderer = std::unique_ptr<ChangeDetectionDisplayRenderer>(
-                            new ChangeDetectionDisplayRenderer(_canvasSize, _decay, _backgroundColor)
+                    if (!_flowDisplayRenderer) {
+                        _flowDisplayRenderer = std::unique_ptr<FlowDisplayRenderer>(
+                            new FlowDisplayRenderer(_canvasSize, _lengthToSpeedRatio, _decay)
                         );
                         connect(
                             window(),
                             &QQuickWindow::beforeRendering,
-                            _changeDetectionDisplayRenderer.get(),
-                            &ChangeDetectionDisplayRenderer::paint,
+                            _flowDisplayRenderer.get(),
+                            &FlowDisplayRenderer::paint,
                             Qt::DirectConnection
                         );
                         _rendererReady.store(true, std::memory_order_release);
@@ -460,7 +504,7 @@ namespace chameleon {
                             _paintArea.moveLeft(clearArea.left());
                             _paintArea.moveTop(clearArea.top() + (clearArea.height() - _paintArea.height()) / 2);
                         }
-                        _changeDetectionDisplayRenderer->setRenderingArea(_clearArea, _paintArea, window()->height() * window()->devicePixelRatio());
+                        _flowDisplayRenderer->setRenderingArea(_paintArea, window()->height() * window()->devicePixelRatio());
                         paintAreaChanged(_paintArea);
                     }
                 }
@@ -468,7 +512,7 @@ namespace chameleon {
 
             /// cleanup resets the renderer.
             void cleanup() {
-                _changeDetectionDisplayRenderer.reset();
+                _flowDisplayRenderer.reset();
             }
 
             /// triggerDraw triggers a draw.
@@ -480,11 +524,11 @@ namespace chameleon {
 
         private slots:
 
-            /// handleWindowChanged must be triggered after a window change.
+            /// handleWindowChanged must be triggered after a window transformation.
             void handleWindowChanged(QQuickWindow* window) {
                 if (window) {
-                    connect(window, &QQuickWindow::beforeSynchronizing, this, &ChangeDetectionDisplay::sync, Qt::DirectConnection);
-                    connect(window, &QQuickWindow::sceneGraphInvalidated, this, &ChangeDetectionDisplay::cleanup, Qt::DirectConnection);
+                    connect(window, &QQuickWindow::beforeSynchronizing, this, &FlowDisplay::sync, Qt::DirectConnection);
+                    connect(window, &QQuickWindow::sceneGraphInvalidated, this, &FlowDisplay::cleanup, Qt::DirectConnection);
                     window->setClearBeforeRendering(false);
                 }
             }
@@ -493,9 +537,9 @@ namespace chameleon {
             std::atomic_bool _ready;
             std::atomic_bool _rendererReady;
             QSize _canvasSize;
+            float _lengthToSpeedRatio;
             float _decay;
-            QColor _backgroundColor;
-            std::unique_ptr<ChangeDetectionDisplayRenderer> _changeDetectionDisplayRenderer;
+            std::unique_ptr<FlowDisplayRenderer> _flowDisplayRenderer;
             QRectF _clearArea;
             QRectF _paintArea;
     };

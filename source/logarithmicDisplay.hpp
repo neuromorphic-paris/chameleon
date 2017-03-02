@@ -145,7 +145,7 @@ namespace chameleon {
                             "        1.0\n"
                             "    );\n"
                             "    exposure = clamp(slope * log(timeDelta) + intercept, 0.0, 1.0);\n"
-                            "}"
+                            "}\n"
                         );
                         auto vertexShaderContent = vertexShader.c_str();
                         auto vertexShaderSize = vertexShader.size();
@@ -191,8 +191,26 @@ namespace chameleon {
                                     "    if (floatIndex == integerIndex) {\n"
                                     "        color = colorTable[integerIndex];\n"
                                     "    } else {\n"
-                                    "        color = (colorTable[integerIndex + 1] - colorTable[integerIndex]) * (floatIndex - integerIndex)\n"
-                                    "            + colorTable[integerIndex];\n"
+                                    "        color = mix(colorTable[integerIndex], colorTable[integerIndex + 1], floatIndex - integerIndex);\n"
+                                    "    }\n"
+                                    "}\n"
+                                );
+                                break;
+                            case 2:
+                                fragmentShader.append(
+                                    "const vec4 colorTable[4] = vec4[](\n"
+                                    "    vec4(0.0, 0.0, 1.0, 1.0),\n"
+                                    "    vec4(0.0, 1.0, 1.0, 1.0),\n"
+                                    "    vec4(1.0, 1.0, 0.0, 1.0),\n"
+                                    "    vec4(1.0, 0.0, 0.0, 1.0)\n"
+                                    ");\n"
+                                    "void main() {\n"
+                                    "    float floatIndex = exposure * 3.0;\n"
+                                    "    int integerIndex = int(floatIndex);\n"
+                                    "    if (floatIndex == integerIndex) {\n"
+                                    "        color = colorTable[integerIndex];\n"
+                                    "    } else {\n"
+                                    "        color = mix(colorTable[integerIndex], colorTable[integerIndex + 1], floatIndex - integerIndex);\n"
                                     "    }\n"
                                     "}\n"
                                 );
@@ -263,9 +281,6 @@ namespace chameleon {
                     glUniform1f(glGetUniformLocation(_programId, "height"), static_cast<GLfloat>(_canvasSize.height()));
                     _slopeLocation = glGetUniformLocation(_programId, "slope");
                     _interceptLocation = glGetUniformLocation(_programId, "intercept");
-
-                    // additional OpenGL settings
-                    glDisable(GL_DEPTH_TEST);
                 } else {
 
                     // copy the events to minimise the strain on the event pipeline
@@ -450,7 +465,7 @@ namespace chameleon {
         public:
 
             /// Colormap defines the colormap used by the display.
-            enum Colormap {grey, heat};
+            enum Colormap {Grey, Heat, Jet};
             Q_ENUM(Colormap)
 
             LogarithmicDisplay() :
@@ -458,7 +473,7 @@ namespace chameleon {
                 _rendererReady(false),
                 _discards(QVector2D(0, 0)),
                 _discardRatio(0.01),
-                _colormap(Colormap::grey),
+                _colormap(Colormap::Grey),
                 _backgroundColor(Qt::black)
 
             {

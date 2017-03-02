@@ -81,7 +81,6 @@ namespace chameleon {
                     _programSetup = true;
                     _programId = glCreateProgram();
                     glLinkProgram(_programId);
-                    glUseProgram(_programId);
                 } else {
                     if (_beforeRenderingDone) {
                         _beforeRenderingDone = false;

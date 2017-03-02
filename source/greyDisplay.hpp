@@ -195,9 +195,6 @@ namespace chameleon {
                     // set the uniform values
                     glUniform1f(glGetUniformLocation(_programId, "width"), static_cast<GLfloat>(_canvasSize.width()));
                     glUniform1f(glGetUniformLocation(_programId, "height"), static_cast<GLfloat>(_canvasSize.height()));
-
-                    // additional OpenGL settings
-                    glDisable(GL_DEPTH_TEST);
                 } else {
 
                     // copy the events to minimise the strain on the event pipeline

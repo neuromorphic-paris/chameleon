@@ -44,7 +44,6 @@ namespace chameleon {
                     _programSetup = true;
                     _programId = glCreateProgram();
                     glLinkProgram(_programId);
-                    glUseProgram(_programId);
                 } else {
 
                     // resize the rendering area
