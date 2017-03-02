@@ -2,7 +2,7 @@
 
 #include <QColor>
 #include <QtQuick/qquickwindow.h>
-#include <QtGui/QOpenGLFunctions>
+#include <QtGui/QOpenGLFunctions_3_3_Core>
 #include <QtQuick/QQuickItem>
 #include <QtGui/QOpenGLContext>
 
@@ -13,7 +13,7 @@
 namespace chameleon {
 
     /// BackgroundCleanerRenderer handles openGL calls for a background cleaner.
-    class BackgroundCleanerRenderer : public QObject, public QOpenGLFunctions {
+    class BackgroundCleanerRenderer : public QObject, public QOpenGLFunctions_3_3_Core {
         Q_OBJECT
         public:
             BackgroundCleanerRenderer(const QColor& color) :
@@ -37,14 +37,16 @@ namespace chameleon {
 
             /// paint sends commands to the GPU.
             void paint() {
-                initializeOpenGLFunctions();
+                if (!initializeOpenGLFunctions()) {
+                    throw std::runtime_error("initializing the OpenGL context failed");
+                }
                 if (!_programSetup) {
                     _programSetup = true;
                     _programId = glCreateProgram();
                     glLinkProgram(_programId);
-                    glUseProgram(_programId);
                 } else {
-                    // Resize the rendering area
+
+                    // resize the rendering area
                     glUseProgram(_programId);
                     glEnable(GL_SCISSOR_TEST);
                     glScissor(

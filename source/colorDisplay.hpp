@@ -2,7 +2,7 @@
 
 #include <QVector3D>
 #include <QtQuick/qquickwindow.h>
-#include <QtGui/QOpenGLFunctions>
+#include <QtGui/QOpenGLFunctions_3_3_Core>
 #include <QtQuick/QQuickItem>
 #include <QtGui/QOpenGLContext>
 
@@ -19,11 +19,12 @@
 namespace chameleon {
 
     /// ColorDisplayRenderer handles openGL calls for a ColorDisplay.
-    class ColorDisplayRenderer : public QObject, public QOpenGLFunctions {
+    class ColorDisplayRenderer : public QObject, public QOpenGLFunctions_3_3_Core {
         Q_OBJECT
         public:
             ColorDisplayRenderer(const QSize& canvasSize, const QColor& backgroundColor):
                 _canvasSize(canvasSize),
+                _backgroundColor(backgroundColor),
                 _colors(_canvasSize.width() * _canvasSize.height() * 3, 0),
                 _duplicatedColors(_canvasSize.width() * _canvasSize.height() * 3),
                 _programSetup(false)
@@ -58,8 +59,12 @@ namespace chameleon {
             ColorDisplayRenderer(ColorDisplayRenderer&&) = default;
             ColorDisplayRenderer& operator=(const ColorDisplayRenderer&) = delete;
             ColorDisplayRenderer& operator=(ColorDisplayRenderer&&) = default;
-            virtual ~ColorDisplayRenderer() {}
+            virtual ~ColorDisplayRenderer() {
+                glDeleteBuffers(2, _vertexBuffersIds.data());
+                glDeleteVertexArrays(1, &_vertexArrayId);
+            }
 
+            /// setRenderingArea defines the rendering area.
             virtual void setRenderingArea(const QRectF& clearArea, const QRectF& paintArea, const int& windowHeight) {
                 _clearArea = clearArea;
                 _clearArea.moveTop(windowHeight - _clearArea.top() - _clearArea.height());
@@ -82,29 +87,31 @@ namespace chameleon {
 
             /// paint sends commands to the GPU.
             void paint() {
-                initializeOpenGLFunctions();
+                if (!initializeOpenGLFunctions()) {
+                    throw std::runtime_error("initializing the OpenGL context failed");
+                }
                 if (!_programSetup) {
                     _programSetup = true;
 
-                    // Compile the vertex shader
+                    // compile the vertex shader
                     const auto vertexShaderId = glCreateShader(GL_VERTEX_SHADER);
                     {
                         const auto vertexShader = std::string(
-                            "#version 120\n"
-                            "attribute vec2 coordinates;"
-                            "attribute vec3 color;"
-                            "varying vec3 fragmentColor;"
-                            "uniform float width;"
-                            "uniform float height;"
-                            "void main() {"
-                            "    gl_Position = vec4("
-                            "        coordinates.x / (width - 1.0) * 2.0 - 1.0,"
-                            "        coordinates.y / (height - 1.0) * 2.0 - 1.0,"
-                            "        0.0,"
-                            "        1.0"
-                            "    );"
-                            "    fragmentColor = color;"
-                            "}"
+                            "#version 330 core\n"
+                            "in vec2 coordinates;\n"
+                            "in vec3 color;\n"
+                            "out vec3 fragmentColor;\n"
+                            "uniform float width;\n"
+                            "uniform float height;\n"
+                            "void main() {\n"
+                            "    gl_Position = vec4(\n"
+                            "        coordinates.x / (width - 1.0) * 2.0 - 1.0,\n"
+                            "        coordinates.y / (height - 1.0) * 2.0 - 1.0,\n"
+                            "        0.0,\n"
+                            "        1.0\n"
+                            "    );\n"
+                            "    fragmentColor = color;\n"
+                            "}\n"
                         );
                         auto vertexShaderContent = vertexShader.c_str();
                         auto vertexShaderSize = vertexShader.size();
@@ -118,15 +125,16 @@ namespace chameleon {
                     glCompileShader(vertexShaderId);
                     checkShaderError(vertexShaderId);
 
-                    // Compile the fragment shader
+                    // compile the fragment shader
                     const auto fragmentShaderId = glCreateShader(GL_FRAGMENT_SHADER);
                     {
-                        auto fragmentShader = std::string(
-                            "#version 120\n"
-                            "varying vec3 fragmentColor;"
-                            "void main() {"
-                            "    gl_FragColor = vec4(fragmentColor, 1.0);"
-                            "}"
+                        const auto fragmentShader = std::string(
+                            "#version 330 core\n"
+                            "in vec3 fragmentColor;\n"
+                            "out vec4 coloro;\n"
+                            "void main() {\n"
+                            "    coloro = vec4(fragmentColor, 1.0);\n"
+                            "}\n"
                         );
                         auto fragmentShaderContent = fragmentShader.c_str();
                         auto fragmentShaderSize = fragmentShader.size();
@@ -140,33 +148,79 @@ namespace chameleon {
                     glCompileShader(fragmentShaderId);
                     checkShaderError(fragmentShaderId);
 
-                    // Create the shaders pipeline
+                    // create the shaders pipeline
                     _programId = glCreateProgram();
                     glAttachShader(_programId, vertexShaderId);
                     glAttachShader(_programId, fragmentShaderId);
                     glLinkProgram(_programId);
-                    glUseProgram(_programId);
-                    _coordinatesLocation = glGetAttribLocation(_programId, "coordinates");
-                    _colorLocation = glGetAttribLocation(_programId, "color");
                     glDeleteShader(vertexShaderId);
                     glDeleteShader(fragmentShaderId);
+                    glUseProgram(_programId);
                     checkProgramError(_programId);
 
-                    // Set the uniform values
+                    // create the vertex buffer objects
+                    glGenBuffers(3, _vertexBuffersIds.data());
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<0>(_vertexBuffersIds));
+                    glBufferData(
+                        GL_ARRAY_BUFFER,
+                        _coordinates.size() * sizeof(decltype(_coordinates)::value_type),
+                        _coordinates.data(),
+                        GL_STATIC_DRAW
+                    );
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertexBuffersIds));
+                    glBufferData(
+                        GL_ARRAY_BUFFER,
+                        _duplicatedColors.size() * sizeof(decltype(_duplicatedColors)::value_type),
+                        _duplicatedColors.data(),
+                        GL_DYNAMIC_DRAW
+                    );
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertexBuffersIds));
+                    glBufferData(
+                        GL_ELEMENT_ARRAY_BUFFER,
+                        _indices.size() * sizeof(decltype(_indices)::value_type),
+                        _indices.data(),
+                        GL_STATIC_DRAW
+                    );
+
+                    // create the vertex array object
+                    glGenVertexArrays(1, &_vertexArrayId);
+                    glBindVertexArray(_vertexArrayId);
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<0>(_vertexBuffersIds));
+                    glEnableVertexAttribArray(glGetAttribLocation(_programId, "coordinates"));
+                    glVertexAttribPointer(glGetAttribLocation(_programId, "coordinates"), 2, GL_FLOAT, GL_FALSE, 0, 0);
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertexBuffersIds));
+                    glEnableVertexAttribArray(glGetAttribLocation(_programId, "color"));
+                    glVertexAttribPointer(glGetAttribLocation(_programId, "color"), 3, GL_FLOAT, GL_FALSE, 0, 0);
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertexBuffersIds));
+                    glBindVertexArray(0);
+
+                    // set the uniform values
                     glUniform1f(glGetUniformLocation(_programId, "width"), static_cast<GLfloat>(_canvasSize.width()));
                     glUniform1f(glGetUniformLocation(_programId, "height"), static_cast<GLfloat>(_canvasSize.height()));
-
-                    // Additional OpenGL settings
-                    glDisable(GL_DEPTH_TEST);
-                    checkOpenGLError();
                 } else {
 
-                    // Copy the events to minimise the strain on the event pipeline
+                    // copy the events to minimise the strain on the event pipeline
                     while (_accessingColors.test_and_set(std::memory_order_acquire)) {}
                     std::copy(_colors.begin(), _colors.end(), _duplicatedColors.begin());
                     _accessingColors.clear(std::memory_order_release);
 
-                    // Resize the rendering area
+                    // send data to the GPU
+                    glUseProgram(_programId);
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertexBuffersIds));
+                    glBufferData(
+                        GL_ARRAY_BUFFER,
+                        _duplicatedColors.size() * sizeof(decltype(_duplicatedColors)::value_type),
+                        nullptr,
+                        GL_DYNAMIC_DRAW
+                    );
+                    glBufferSubData(
+                        GL_ARRAY_BUFFER,
+                        0,
+                        _duplicatedColors.size() * sizeof(decltype(_duplicatedColors)::value_type),
+                        _duplicatedColors.data()
+                    );
+
+                    // resize the rendering area
                     glUseProgram(_programId);
                     glEnable(GL_SCISSOR_TEST);
                     glScissor(
@@ -189,22 +243,13 @@ namespace chameleon {
                         static_cast<GLsizei>(_paintArea.width()),
                         static_cast<GLsizei>(_paintArea.height())
                     );
-                    glEnable(GL_SCISSOR_TEST);
-                    glScissor(
-                        static_cast<GLint>(_paintArea.left()),
-                        static_cast<GLint>(_paintArea.top()),
-                        static_cast<GLsizei>(_paintArea.width()),
-                        static_cast<GLsizei>(_paintArea.height())
-                    );
 
-                    // Send varying data to the GPU
-                    glEnableVertexAttribArray(_coordinatesLocation);
-                    glEnableVertexAttribArray(_colorLocation);
-                    glVertexAttribPointer(_coordinatesLocation, 2, GL_FLOAT, GL_FALSE, 0, _coordinates.data());
-                    glVertexAttribPointer(_colorLocation, 3, GL_FLOAT, GL_FALSE, 0, _duplicatedColors.data());
-                    glDrawElements(GL_TRIANGLE_STRIP, _indices.size(),  GL_UNSIGNED_INT, _indices.data());
-                    glDisable(GL_SCISSOR_TEST);
+                    // send varying data to the GPU
+                    glBindVertexArray(_vertexArrayId);
+                    glDrawElements(GL_TRIANGLE_STRIP, _indices.size(), GL_UNSIGNED_INT, nullptr);
+                    glBindVertexArray(0);
                 }
+                checkOpenGLError();
             }
 
         protected:
@@ -262,10 +307,10 @@ namespace chameleon {
             std::atomic_flag _accessingColors;
             QRectF _clearArea;
             QRectF _paintArea;
-            GLuint _programId;
             bool _programSetup;
-            GLuint _coordinatesLocation;
-            GLuint _colorLocation;
+            GLuint _programId;
+            GLuint _vertexArrayId;
+            std::array<GLuint, 3> _vertexBuffersIds;
     };
 
     /// ColorDisplay displays a stream of color events without tone-mapping.
@@ -350,15 +395,15 @@ namespace chameleon {
             /// sync adapts the renderer to external changes.
             void sync() {
                 if (_ready.load(std::memory_order_relaxed)) {
-                    if (!_changeDetectionDisplayRenderer) {
-                        _changeDetectionDisplayRenderer = std::unique_ptr<ChangeDetectionDisplayRenderer>(
-                            new ChangeDetectionDisplayRenderer(_canvasSize, _backgroundColor)
+                    if (!_colorDisplayRenderer) {
+                        _colorDisplayRenderer = std::unique_ptr<ColorDisplayRenderer>(
+                            new ColorDisplayRenderer(_canvasSize, _backgroundColor)
                         );
                         connect(
                             window(),
                             &QQuickWindow::beforeRendering,
-                            _changeDetectionDisplayRenderer.get(),
-                            &ChangeDetectionDisplayRenderer::paint,
+                            _colorDisplayRenderer.get(),
+                            &ColorDisplayRenderer::paint,
                             Qt::DirectConnection
                         );
                         _rendererReady.store(true, std::memory_order_release);
@@ -381,7 +426,7 @@ namespace chameleon {
                             _paintArea.moveLeft(clearArea.left());
                             _paintArea.moveTop(clearArea.top() + (clearArea.height() - _paintArea.height()) / 2);
                         }
-                        _changeDetectionDisplayRenderer->setRenderingArea(_clearArea, _paintArea, window()->height() * window()->devicePixelRatio());
+                        _colorDisplayRenderer->setRenderingArea(_clearArea, _paintArea, window()->height() * window()->devicePixelRatio());
                         paintAreaChanged(_paintArea);
                     }
                 }
@@ -416,7 +461,6 @@ namespace chameleon {
             QSize _canvasSize;
             QColor _backgroundColor;
             std::unique_ptr<ColorDisplayRenderer> _colorDisplayRenderer;
-            std::atomic_bool _rendererReady;
             QRectF _clearArea;
             QRectF _paintArea;
     };

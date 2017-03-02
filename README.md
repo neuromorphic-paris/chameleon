@@ -34,7 +34,7 @@ To uninstall the library, run `premake4 uninstall` from the *chameleon* director
 ## Test
 
 To test the library, run the following commands:
-  - Go to the *chameleon* directory and run `premake4 gmake && cd build && make`. Use `premake4 --icc gmake` instead to use the Intel c++ compiler.
+  - Go to the *chameleon* directory and run `premake4 gmake && cd build && make`.
   - Run the executable *Release/chameleonTest*.
 
 # User guides and documentation

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <QtQuick/qquickwindow.h>
-#include <QtGui/QOpenGLFunctions>
+#include <QtGui/QOpenGLFunctions_3_3_Core>
 #include <QtQuick/QQuickItem>
 #include <QtGui/QOpenGLContext>
 #include <QImage>
@@ -16,7 +16,7 @@
 namespace chameleon {
 
     /// FrameGeneratorRenderer handles openGL calls for a frameGenerator.
-    class FrameGeneratorRenderer : public QObject, public QOpenGLFunctions {
+    class FrameGeneratorRenderer : public QObject, public QOpenGLFunctions_3_3_Core {
         Q_OBJECT
         public:
             FrameGeneratorRenderer() :
@@ -49,8 +49,9 @@ namespace chameleon {
                 _pixelsMutex.unlock();
                 auto lock = std::unique_lock<std::mutex>(_pixelsMutex);
                 _pixelsUpdated.wait(lock);
-                if (_closing) {
-                    const auto success = QImage(
+                auto success = true;
+                if (!_closing) {
+                    success = QImage(
                         _pixels.data(),
                         _imageWidth,
                         _imageHeight,
@@ -73,12 +74,13 @@ namespace chameleon {
 
             /// afterRenderingCallback is called when a rendering ends.
             void afterRenderingCallback() {
-                initializeOpenGLFunctions();
+                if (!initializeOpenGLFunctions()) {
+                    throw std::runtime_error("initializing the OpenGL context failed");
+                }
                 if (!_programSetup) {
                     _programSetup = true;
                     _programId = glCreateProgram();
                     glLinkProgram(_programId);
-                    glUseProgram(_programId);
                 } else {
                     if (_beforeRenderingDone) {
                         _beforeRenderingDone = false;
@@ -109,7 +111,7 @@ namespace chameleon {
             void closing() {
                 {
                     const std::lock_guard<std::mutex> lock(_pixelsMutex);
-                    _closing.store(true, std::memory_order_release);
+                    _closing = true;
                 }
                 _pixelsUpdated.notify_one();
             }
