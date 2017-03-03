@@ -406,7 +406,7 @@ namespace chameleon {
             /// push adds an event to the display.
             template<typename Event>
             void push(Event event) {
-                while (_rendererReady.load(std::memory_order_acquire)) {}
+                while (!_rendererReady.load(std::memory_order_acquire)) {}
                 _changeDetectionDisplayRenderer->push<Event>(event);
             }
 
