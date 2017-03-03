@@ -462,11 +462,11 @@ namespace chameleon {
         Q_PROPERTY(Colormap colormap READ colormap WRITE setColormap)
         Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor)
         Q_PROPERTY(QRectF paintArea READ paintArea)
+        Q_ENUMS(Colormap)
         public:
 
             /// Colormap defines the colormap used by the display.
             enum Colormap {Grey, Heat, Jet};
-            Q_ENUM(Colormap)
 
             LogarithmicDisplay() :
                 _ready(false),
