@@ -144,7 +144,7 @@ namespace chameleon {
                             "        0.0,\n"
                             "        1.0\n"
                             "    );\n"
-                            "    exposure = clamp(slope * log(timeDelta) + intercept, 0.0, 1.0);\n"
+                            "    exposure = min(max(slope * log(timeDelta) + intercept, 0.0), 1.0);\n"
                             "}\n"
                         );
                         auto vertexShaderContent = vertexShader.c_str();
