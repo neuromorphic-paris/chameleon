@@ -128,25 +128,86 @@ namespace chameleon {
                     // compile the vertex shader
                     const auto vertexShaderId = glCreateShader(GL_VERTEX_SHADER);
                     {
-                        const auto vertexShader = std::string(
+                        auto vertexShader = std::string(
                             "#version 330 core\n"
                             "in vec2 coordinates;\n"
                             "in float timeDelta;\n"
-                            "out float exposure;\n"
+                            "out vec4 fragmentColor;\n"
                             "uniform float width;\n"
                             "uniform float height;\n"
                             "uniform float slope;\n"
                             "uniform float intercept;\n"
-                            "void main() {\n"
-                            "    gl_Position = vec4(\n"
-                            "        coordinates.x / (width - 1.0) * 2.0 - 1.0,\n"
-                            "        coordinates.y / (height - 1.0) * 2.0 - 1.0,\n"
-                            "        0.0,\n"
-                            "        1.0\n"
-                            "    );\n"
-                            "    exposure = clamp(slope * log(timeDelta) + intercept, 0.0, 1.0);\n"
-                            "}\n"
                         );
+                        switch (_colormap) {
+                            case 0:
+                                vertexShader.append(
+                                    "void main() {\n"
+                                    "    gl_Position = vec4(\n"
+                                    "        coordinates.x / (width - 1.0) * 2.0 - 1.0,\n"
+                                    "        coordinates.y / (height - 1.0) * 2.0 - 1.0,\n"
+                                    "        0.0,\n"
+                                    "        1.0\n"
+                                    "    );\n"
+                                    "    float exposure = clamp(slope * log(timeDelta) + intercept, 0.0, 1.0);\n"
+                                    "    fragmentColor = vec4(exposure, exposure, exposure, 1.0);\n"
+                                    "}\n"
+                                );
+                                break;
+                            case 1:
+                                vertexShader.append(
+                                    "const vec4 colorTable[6] = vec4[](\n"
+                                    "    vec4(0.0, 0.0, 0.0, 1.0),\n"
+                                    "    vec4(0.5, 0.0, 0.0, 1.0),\n"
+                                    "    vec4(1.0, 0.0, 0.0, 1.0),\n"
+                                    "    vec4(1.0, 0.5, 0.0, 1.0),\n"
+                                    "    vec4(1.0, 1.0, 0.0, 1.0),\n"
+                                    "    vec4(1.0, 1.0, 1.0, 1.0)\n"
+                                    ");\n"
+                                    "void main() {\n"
+                                    "    gl_Position = vec4(\n"
+                                    "        coordinates.x / (width - 1.0) * 2.0 - 1.0,\n"
+                                    "        coordinates.y / (height - 1.0) * 2.0 - 1.0,\n"
+                                    "        0.0,\n"
+                                    "        1.0\n"
+                                    "    );\n"
+                                    "    float floatIndex = clamp(slope * log(timeDelta) + intercept, 0.0, 1.0) * 5;\n"
+                                    "    int integerIndex = int(floatIndex);\n"
+                                    "    if (floatIndex == integerIndex) {\n"
+                                    "        fragmentColor = colorTable[integerIndex];\n"
+                                    "    } else {\n"
+                                    "        fragmentColor = mix(colorTable[integerIndex], colorTable[integerIndex + 1], floatIndex - integerIndex);\n"
+                                    "    }\n"
+                                    "}\n"
+                                );
+                                break;
+                            case 2:
+                                vertexShader.append(
+                                    "const vec4 colorTable[4] = vec4[](\n"
+                                    "    vec4(0.0, 0.0, 1.0, 1.0),\n"
+                                    "    vec4(0.0, 1.0, 1.0, 1.0),\n"
+                                    "    vec4(1.0, 1.0, 0.0, 1.0),\n"
+                                    "    vec4(1.0, 0.0, 0.0, 1.0)\n"
+                                    ");\n"
+                                    "void main() {\n"
+                                    "    gl_Position = vec4(\n"
+                                    "        coordinates.x / (width - 1.0) * 2.0 - 1.0,\n"
+                                    "        coordinates.y / (height - 1.0) * 2.0 - 1.0,\n"
+                                    "        0.0,\n"
+                                    "        1.0\n"
+                                    "    );\n"
+                                    "    float floatIndex = clamp(slope * log(timeDelta) + intercept, 0.0, 1.0) * 3;\n"
+                                    "    int integerIndex = int(floatIndex);\n"
+                                    "    if (floatIndex == integerIndex) {\n"
+                                    "        fragmentColor = colorTable[integerIndex];\n"
+                                    "    } else {\n"
+                                    "        fragmentColor = mix(colorTable[integerIndex], colorTable[integerIndex + 1], floatIndex - integerIndex);\n"
+                                    "    }\n"
+                                    "}\n"
+                                );
+                                break;
+                            default:
+                                throw std::logic_error("Unknown colormap id");
+                        }
                         auto vertexShaderContent = vertexShader.c_str();
                         auto vertexShaderSize = vertexShader.size();
                         glShaderSource(
@@ -162,62 +223,14 @@ namespace chameleon {
                     // compile the fragment shader
                     const auto fragmentShaderId = glCreateShader(GL_FRAGMENT_SHADER);
                     {
-                        auto fragmentShader = std::string(
+                        const auto fragmentShader = std::string(
                             "#version 330 core\n"
-                            "in float exposure;\n"
+                            "in vec4 fragmentColor;\n"
                             "out vec4 color;\n"
+                            "void main() {\n"
+                            "    color = fragmentColor;\n"
+                            "}\n"
                         );
-                        switch (_colormap) {
-                            case 0:
-                                fragmentShader.append(
-                                    "void main() {\n"
-                                    "    color = vec4(exposure, exposure, exposure, 1.0);\n"
-                                    "}\n"
-                                );
-                                break;
-                            case 1:
-                                fragmentShader.append(
-                                    "const vec4 colorTable[6] = vec4[](\n"
-                                    "    vec4(0.0, 0.0, 0.0, 1.0),\n"
-                                    "    vec4(0.5, 0.0, 0.0, 1.0),\n"
-                                    "    vec4(1.0, 0.0, 0.0, 1.0),\n"
-                                    "    vec4(1.0, 0.5, 0.0, 1.0),\n"
-                                    "    vec4(1.0, 1.0, 0.0, 1.0),\n"
-                                    "    vec4(1.0, 1.0, 1.0, 1.0)\n"
-                                    ");\n"
-                                    "void main() {\n"
-                                    "    float floatIndex = exposure * 5.0;\n"
-                                    "    int integerIndex = int(floatIndex);\n"
-                                    "    if (floatIndex == integerIndex) {\n"
-                                    "        color = colorTable[integerIndex];\n"
-                                    "    } else {\n"
-                                    "        color = mix(colorTable[integerIndex], colorTable[integerIndex + 1], floatIndex - integerIndex);\n"
-                                    "    }\n"
-                                    "}\n"
-                                );
-                                break;
-                            case 2:
-                                fragmentShader.append(
-                                    "const vec4 colorTable[4] = vec4[](\n"
-                                    "    vec4(0.0, 0.0, 1.0, 1.0),\n"
-                                    "    vec4(0.0, 1.0, 1.0, 1.0),\n"
-                                    "    vec4(1.0, 1.0, 0.0, 1.0),\n"
-                                    "    vec4(1.0, 0.0, 0.0, 1.0)\n"
-                                    ");\n"
-                                    "void main() {\n"
-                                    "    float floatIndex = exposure * 3.0;\n"
-                                    "    int integerIndex = int(floatIndex);\n"
-                                    "    if (floatIndex == integerIndex) {\n"
-                                    "        color = colorTable[integerIndex];\n"
-                                    "    } else {\n"
-                                    "        color = mix(colorTable[integerIndex], colorTable[integerIndex + 1], floatIndex - integerIndex);\n"
-                                    "    }\n"
-                                    "}\n"
-                                );
-                                break;
-                            default:
-                                throw std::logic_error("Unknown colormap id");
-                        }
                         auto fragmentShaderContent = fragmentShader.c_str();
                         auto fragmentShaderSize = fragmentShader.size();
                         glShaderSource(
@@ -462,11 +475,11 @@ namespace chameleon {
         Q_PROPERTY(Colormap colormap READ colormap WRITE setColormap)
         Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor)
         Q_PROPERTY(QRectF paintArea READ paintArea)
+        Q_ENUMS(Colormap)
         public:
 
             /// Colormap defines the colormap used by the display.
             enum Colormap {Grey, Heat, Jet};
-            Q_ENUM(Colormap)
 
             LogarithmicDisplay() :
                 _ready(false),
@@ -569,9 +582,8 @@ namespace chameleon {
             /// push adds an event to the display.
             template<typename Event>
             void push(Event event) {
-                if (_rendererReady.load(std::memory_order_relaxed)) {
-                    _logarithmicDisplayRenderer->push<Event>(event);
-                }
+                while (_rendererReady.load(std::memory_order_acquire)) {}
+                _logarithmicDisplayRenderer->push<Event>(event);
             }
 
             /// componentComplete is called when all the qml values are binded.
