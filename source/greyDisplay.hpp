@@ -370,9 +370,8 @@ namespace chameleon {
             /// push adds an event to the display.
             template<typename Event>
             void push(Event event) {
-                if (_rendererReady.load(std::memory_order_relaxed)) {
-                    _greyDisplayRenderer->push<Event>(event);
-                }
+                while (_rendererReady.load(std::memory_order_acquire)) {}
+                _greyDisplayRenderer->push<Event>(event);
             }
 
             /// componentComplete is called when all the qml values are binded.
