@@ -149,7 +149,7 @@ namespace chameleon {
                             "        return;\n"
                             "    }\n"
                             "    float alpha = exp(-(currentTimestamp - geometryTimestampAndFlow[0].x) / decay);\n"
-                            "    float floatIndex = min(max(atan(speedVector.y, speedVector.x) / (2 * flowDisplayPi) + 0.5, 0.0), 1.0) * 6.0;\n"
+                            "    float floatIndex = clamp(atan(speedVector.y, speedVector.x) / (2 * flowDisplayPi) + 0.5, 0.0, 1.0) * 6.0;\n"
                             "    int integerIndex = int(floatIndex);\n"
                             "    if (floatIndex == integerIndex) {\n"
                             "        fragmentColor = vec4(colorTable[integerIndex], alpha);\n"
