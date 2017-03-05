@@ -43,4 +43,4 @@ Code documentation is held in the [wiki](https://github.com/neuromorphic-paris/c
 
 # License
 
-See the [LICENSE](LICENSE.md) file for license rights and limitations (MIT).
+See the [LICENSE](LICENSE.txt) file for license rights and limitations (GNU GPLv3).
