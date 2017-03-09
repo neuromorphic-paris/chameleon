@@ -17,8 +17,7 @@ namespace chameleon {
         Q_OBJECT
         public:
             BackgroundCleanerRenderer(const QColor& color) :
-                _color(color),
-                _programSetup(false)
+                _color(color)
             {
             }
             BackgroundCleanerRenderer(const BackgroundCleanerRenderer&) = delete;
