@@ -41,7 +41,6 @@ namespace chameleon {
                 }
 
                 // resize the rendering area
-                glUseProgram(_programId);
                 glEnable(GL_SCISSOR_TEST);
                 glScissor(
                     static_cast<GLint>(_clearArea.left()),
