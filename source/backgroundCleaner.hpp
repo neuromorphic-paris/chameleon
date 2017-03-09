@@ -17,8 +17,7 @@ namespace chameleon {
         Q_OBJECT
         public:
             BackgroundCleanerRenderer(const QColor& color) :
-                _color(color),
-                _programSetup(false)
+                _color(color)
             {
             }
             BackgroundCleanerRenderer(const BackgroundCleanerRenderer&) = delete;
@@ -40,37 +39,46 @@ namespace chameleon {
                 if (!initializeOpenGLFunctions()) {
                     throw std::runtime_error("initializing the OpenGL context failed");
                 }
-                if (!_programSetup) {
-                    _programSetup = true;
-                    _programId = glCreateProgram();
-                    glLinkProgram(_programId);
-                } else {
 
-                    // resize the rendering area
-                    glUseProgram(_programId);
-                    glEnable(GL_SCISSOR_TEST);
-                    glScissor(
-                        static_cast<GLint>(_clearArea.left()),
-                        static_cast<GLint>(_clearArea.top()),
-                        static_cast<GLsizei>(_clearArea.width()),
-                        static_cast<GLsizei>(_clearArea.height())
-                    );
-                    glClearColor(
-                        static_cast<GLfloat>(_color.redF()),
-                        static_cast<GLfloat>(_color.greenF()),
-                        static_cast<GLfloat>(_color.blueF()),
-                        static_cast<GLfloat>(_color.alphaF())
-                    );
-                    glClear(GL_COLOR_BUFFER_BIT);
-                    glDisable(GL_SCISSOR_TEST);
-                }
+                // resize the rendering area
+                glEnable(GL_SCISSOR_TEST);
+                glScissor(
+                    static_cast<GLint>(_clearArea.left()),
+                    static_cast<GLint>(_clearArea.top()),
+                    static_cast<GLsizei>(_clearArea.width()),
+                    static_cast<GLsizei>(_clearArea.height())
+                );
+                glClearColor(
+                    static_cast<GLfloat>(_color.redF()),
+                    static_cast<GLfloat>(_color.greenF()),
+                    static_cast<GLfloat>(_color.blueF()),
+                    static_cast<GLfloat>(_color.alphaF())
+                );
+                glClear(GL_COLOR_BUFFER_BIT);
+                glDisable(GL_SCISSOR_TEST);
+                checkOpenGLError();
             }
 
         protected:
+
+            /// checkOpenGLError throws if openGL generated an error.
+            virtual void checkOpenGLError() {
+                switch (glGetError()) {
+                    case GL_NO_ERROR:
+                        break;
+                    case GL_INVALID_ENUM:
+                        throw std::logic_error("OpenGL error: GL_INVALID_ENUM");
+                    case GL_INVALID_VALUE:
+                        throw std::logic_error("OpenGL error: GL_INVALID_VALUE");
+                    case GL_INVALID_OPERATION:
+                        throw std::logic_error("OpenGL error: GL_INVALID_OPERATION");
+                    case GL_OUT_OF_MEMORY:
+                        throw std::logic_error("OpenGL error: GL_OUT_OF_MEMORY");
+                }
+            }
+
             QColor _color;
             QRectF _clearArea;
-            bool _programSetup;
-            GLuint _programId;
     };
 
     /// BackgroundCleaner cleans the background for OpenGL renderers.
