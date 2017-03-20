@@ -22,17 +22,17 @@ namespace chameleon {
             ChangeDetectionDisplayRenderer(
                 const QSize& canvasSize,
                 const float& decay,
-                const QColor& backgroundColor,
                 const QColor& increaseColor,
                 const QColor& idleColor,
-                const QColor& decreaseColor
+                const QColor& decreaseColor,
+                const QColor& backgroundColor
             ) :
                 _canvasSize(canvasSize),
                 _decay(decay),
-                _backgroundColor(backgroundColor),
                 _increaseColor(increaseColor),
                 _idleColor(idleColor),
                 _decreaseColor(decreaseColor),
+                _backgroundColor(backgroundColor),
                 _currentTimestamp(0),
                 _duplicatedTimestampsAndAreIncreases(_canvasSize.width() * _canvasSize.height() * 2),
                 _programSetup(false)
@@ -348,10 +348,10 @@ namespace chameleon {
 
             QSize _canvasSize;
             float _decay;
-            QColor _backgroundColor;
             QColor _increaseColor;
             QColor _idleColor;
             QColor _decreaseColor;
+            QColor _backgroundColor;
             float _currentTimestamp;
             float _duplicatedCurrentTimestamp;
             std::vector<GLuint> _indices;
@@ -374,10 +374,10 @@ namespace chameleon {
         Q_INTERFACES(QQmlParserStatus)
         Q_PROPERTY(QSize canvasSize READ canvasSize WRITE setCanvasSize)
         Q_PROPERTY(float decay READ decay WRITE setDecay)
-        Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor)
         Q_PROPERTY(QColor increaseColor READ increaseColor WRITE setIncreaseColor)
         Q_PROPERTY(QColor idleColor READ idleColor WRITE setIdleColor)
         Q_PROPERTY(QColor decreaseColor READ decreaseColor WRITE setDecreaseColor)
+        Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor)
         Q_PROPERTY(QRectF paintArea READ paintArea)
         public:
             ChangeDetectionDisplay() :
@@ -427,21 +427,6 @@ namespace chameleon {
                 return _decay;
             }
 
-            /// setBackgroundColor defines the background color used to compensate the parent's shape.
-            /// The background color will be passed to the openGL renderer, therefore it should only be set during qml construction.
-            virtual void setBackgroundColor(QColor backgroundColor) {
-                if (_ready.load(std::memory_order_acquire)) {
-                    throw std::logic_error("backgroundColor can only be set during qml construction");
-                }
-                _backgroundColor = backgroundColor;
-            }
-
-            /// backgroundColor returns the currently used backgroundColor.
-            virtual QColor backgroundColor() const {
-                return _backgroundColor;
-            }
-
-
             /// setIncreaseColor defines the color used to represent increasing light.
             /// The increase color will be passed to the openGL renderer, therefore it should only be set during qml construction.
             virtual void setIncreaseColor(QColor increaseColor) {
@@ -484,6 +469,20 @@ namespace chameleon {
                 return _decreaseColor;
             }
 
+            /// setBackgroundColor defines the background color used to compensate the parent's shape.
+            /// The background color will be passed to the openGL renderer, therefore it should only be set during qml construction.
+            virtual void setBackgroundColor(QColor backgroundColor) {
+                if (_ready.load(std::memory_order_acquire)) {
+                    throw std::logic_error("backgroundColor can only be set during qml construction");
+                }
+                _backgroundColor = backgroundColor;
+            }
+
+            /// backgroundColor returns the currently used backgroundColor.
+            virtual QColor backgroundColor() const {
+                return _backgroundColor;
+            }
+
             /// paintArea returns the paint area in window coordinates.
             virtual QRectF paintArea() const {
                 return _paintArea;
@@ -516,7 +515,7 @@ namespace chameleon {
                 if (_ready.load(std::memory_order_relaxed)) {
                     if (!_changeDetectionDisplayRenderer) {
                         _changeDetectionDisplayRenderer = std::unique_ptr<ChangeDetectionDisplayRenderer>(
-                            new ChangeDetectionDisplayRenderer(_canvasSize, _decay, _backgroundColor, _increaseColor, _idleColor, _decreaseColor)
+                            new ChangeDetectionDisplayRenderer(_canvasSize, _decay, _increaseColor, _idleColor, _decreaseColor, _backgroundColor)
                         );
                         connect(
                             window(),
@@ -579,10 +578,10 @@ namespace chameleon {
             std::atomic_bool _rendererReady;
             QSize _canvasSize;
             float _decay;
-            QColor _backgroundColor;
             QColor _increaseColor;
             QColor _idleColor;
             QColor _decreaseColor;
+            QColor _backgroundColor;
             std::unique_ptr<ChangeDetectionDisplayRenderer> _changeDetectionDisplayRenderer;
             QRectF _clearArea;
             QRectF _paintArea;
