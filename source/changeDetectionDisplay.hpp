@@ -19,10 +19,20 @@ namespace chameleon {
     class ChangeDetectionDisplayRenderer : public QObject, public QOpenGLFunctions_3_3_Core {
         Q_OBJECT
         public:
-            ChangeDetectionDisplayRenderer(const QSize& canvasSize, const float& decay, const QColor& backgroundColor) :
+            ChangeDetectionDisplayRenderer(
+                const QSize& canvasSize,
+                const float& decay,
+                const QColor& backgroundColor,
+                const QColor& increaseColor,
+                const QColor& idleColor,
+                const QColor& decreaseColor
+            ) :
                 _canvasSize(canvasSize),
                 _decay(decay),
                 _backgroundColor(backgroundColor),
+                _increaseColor(increaseColor),
+                _idleColor(idleColor),
+                _decreaseColor(decreaseColor),
                 _currentTimestamp(0),
                 _duplicatedTimestampsAndAreIncreases(_canvasSize.width() * _canvasSize.height() * 2),
                 _programSetup(false)
@@ -101,11 +111,14 @@ namespace chameleon {
                             "#version 330 core\n"
                             "in vec2 coordinates;\n"
                             "in vec2 timestampAndIsIncrease;\n"
-                            "out float exposure;\n"
+                            "out vec4 fragmentColor;\n"
                             "uniform float width;\n"
                             "uniform float height;\n"
                             "uniform float decay;\n"
                             "uniform float currentTimestamp;\n"
+                            "uniform vec4 increaseColor;\n"
+                            "uniform vec4 idleColor;\n"
+                            "uniform vec4 decreaseColor;\n"
                             "void main() {\n"
                             "    gl_Position = vec4(\n"
                             "        coordinates.x / (width - 1.0) * 2.0 - 1.0,\n"
@@ -114,13 +127,13 @@ namespace chameleon {
                             "        1.0\n"
                             "    );\n"
                             "    if (timestampAndIsIncrease.x > currentTimestamp) {\n"
-                            "        exposure = 0.5;\n"
+                            "        fragmentColor = idleColor;\n"
                             "    } else {\n"
-                            "        if (timestampAndIsIncrease.y > 0.5) {\n"
-                            "            exposure = 0.5 * exp(-(currentTimestamp - timestampAndIsIncrease.x) / decay) + 0.5;\n"
-                            "        } else {\n"
-                            "            exposure = 0.5 - 0.5 * exp(-(currentTimestamp - timestampAndIsIncrease.x) / decay);\n"
-                            "        }\n"
+                            "        float lambda = exp(-(currentTimestamp - timestampAndIsIncrease.x) / decay);\n"
+                            "        fragmentColor =\n"
+                            "            lambda * (timestampAndIsIncrease.y > 0.5 ? increaseColor : decreaseColor)\n"
+                            "            + (1 - lambda) * idleColor\n"
+                            "        ;\n"
                             "    }\n"
                             "}\n"
                         );
@@ -141,10 +154,10 @@ namespace chameleon {
                     {
                         const auto fragmentShader = std::string(
                             "#version 330 core\n"
-                            "in float exposure;\n"
+                            "in vec4 fragmentColor;\n"
                             "out vec4 color\n;"
                             "void main() {\n"
-                            "    color = vec4(exposure, exposure, exposure, 1.0);\n"
+                            "    color = fragmentColor;\n"
                             "}\n"
                         );
                         auto fragmentShaderContent = fragmentShader.c_str();
@@ -209,6 +222,27 @@ namespace chameleon {
                     glUniform1f(glGetUniformLocation(_programId, "width"), static_cast<GLfloat>(_canvasSize.width()));
                     glUniform1f(glGetUniformLocation(_programId, "height"), static_cast<GLfloat>(_canvasSize.height()));
                     glUniform1f(glGetUniformLocation(_programId, "decay"), static_cast<GLfloat>(_decay));
+                    glUniform4f(
+                        glGetUniformLocation(_programId, "increaseColor"),
+                        static_cast<GLfloat>(_increaseColor.redF()),
+                        static_cast<GLfloat>(_increaseColor.greenF()),
+                        static_cast<GLfloat>(_increaseColor.blueF()),
+                        static_cast<GLfloat>(_increaseColor.alphaF())
+                    );
+                    glUniform4f(
+                        glGetUniformLocation(_programId, "idleColor"),
+                        static_cast<GLfloat>(_idleColor.redF()),
+                        static_cast<GLfloat>(_idleColor.greenF()),
+                        static_cast<GLfloat>(_idleColor.blueF()),
+                        static_cast<GLfloat>(_idleColor.alphaF())
+                    );
+                    glUniform4f(
+                        glGetUniformLocation(_programId, "decreaseColor"),
+                        static_cast<GLfloat>(_decreaseColor.redF()),
+                        static_cast<GLfloat>(_decreaseColor.greenF()),
+                        static_cast<GLfloat>(_decreaseColor.blueF()),
+                        static_cast<GLfloat>(_decreaseColor.alphaF())
+                    );
                     _currentTimestampLocation = glGetUniformLocation(_programId, "currentTimestamp");
                 } else {
 
@@ -315,6 +349,9 @@ namespace chameleon {
             QSize _canvasSize;
             float _decay;
             QColor _backgroundColor;
+            QColor _increaseColor;
+            QColor _idleColor;
+            QColor _decreaseColor;
             float _currentTimestamp;
             float _duplicatedCurrentTimestamp;
             std::vector<GLuint> _indices;
@@ -338,13 +375,19 @@ namespace chameleon {
         Q_PROPERTY(QSize canvasSize READ canvasSize WRITE setCanvasSize)
         Q_PROPERTY(float decay READ decay WRITE setDecay)
         Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor)
+        Q_PROPERTY(QColor increaseColor READ increaseColor WRITE setIncreaseColor)
+        Q_PROPERTY(QColor idleColor READ idleColor WRITE setIdleColor)
+        Q_PROPERTY(QColor decreaseColor READ decreaseColor WRITE setDecreaseColor)
         Q_PROPERTY(QRectF paintArea READ paintArea)
         public:
             ChangeDetectionDisplay() :
                 _ready(false),
                 _rendererReady(false),
                 _decay(1e5),
-                _backgroundColor(Qt::black)
+                _backgroundColor(Qt::black),
+                _increaseColor(Qt::white),
+                _idleColor(Qt::darkGray),
+                _decreaseColor(Qt::black)
             {
                 connect(this, &QQuickItem::windowChanged, this, &ChangeDetectionDisplay::handleWindowChanged);
             }
@@ -398,6 +441,49 @@ namespace chameleon {
                 return _backgroundColor;
             }
 
+
+            /// setIncreaseColor defines the color used to represent increasing light.
+            /// The increase color will be passed to the openGL renderer, therefore it should only be set during qml construction.
+            virtual void setIncreaseColor(QColor increaseColor) {
+                if (_ready.load(std::memory_order_acquire)) {
+                    throw std::logic_error("increaseColor can only be set during qml construction");
+                }
+                _increaseColor = increaseColor;
+            }
+
+            /// increaseColor returns the currently used increaseColor.
+            virtual QColor increaseColor() const {
+                return _increaseColor;
+            }
+
+            /// setIdleColor defines the color used to represent idle pixels.
+            /// The idle color will be passed to the openGL renderer, therefore it should only be set during qml construction.
+            virtual void setIdleColor(QColor idleColor) {
+                if (_ready.load(std::memory_order_acquire)) {
+                    throw std::logic_error("idleColor can only be set during qml construction");
+                }
+                _idleColor = idleColor;
+            }
+
+            /// idleColor returns the currently used idleColor.
+            virtual QColor idleColor() const {
+                return _idleColor;
+            }
+
+            /// setDecreaseColor defines the color used to represent decreasing light.
+            /// The decrease color will be passed to the openGL renderer, therefore it should only be set during qml construction.
+            virtual void setDecreaseColor(QColor decreaseColor) {
+                if (_ready.load(std::memory_order_acquire)) {
+                    throw std::logic_error("decreaseColor can only be set during qml construction");
+                }
+                _decreaseColor = decreaseColor;
+            }
+
+            /// decreaseColor returns the currently used decreaseColor.
+            virtual QColor decreaseColor() const {
+                return _decreaseColor;
+            }
+
             /// paintArea returns the paint area in window coordinates.
             virtual QRectF paintArea() const {
                 return _paintArea;
@@ -430,7 +516,7 @@ namespace chameleon {
                 if (_ready.load(std::memory_order_relaxed)) {
                     if (!_changeDetectionDisplayRenderer) {
                         _changeDetectionDisplayRenderer = std::unique_ptr<ChangeDetectionDisplayRenderer>(
-                            new ChangeDetectionDisplayRenderer(_canvasSize, _decay, _backgroundColor)
+                            new ChangeDetectionDisplayRenderer(_canvasSize, _decay, _backgroundColor, _increaseColor, _idleColor, _decreaseColor)
                         );
                         connect(
                             window(),
@@ -494,6 +580,9 @@ namespace chameleon {
             QSize _canvasSize;
             float _decay;
             QColor _backgroundColor;
+            QColor _increaseColor;
+            QColor _idleColor;
+            QColor _decreaseColor;
             std::unique_ptr<ChangeDetectionDisplayRenderer> _changeDetectionDisplayRenderer;
             QRectF _clearArea;
             QRectF _paintArea;
