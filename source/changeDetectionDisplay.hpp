@@ -384,10 +384,10 @@ namespace chameleon {
                 _ready(false),
                 _rendererReady(false),
                 _decay(1e5),
-                _backgroundColor(Qt::black),
                 _increaseColor(Qt::white),
                 _idleColor(Qt::darkGray),
-                _decreaseColor(Qt::black)
+                _decreaseColor(Qt::black),
+                _backgroundColor(Qt::black)
             {
                 connect(this, &QQuickItem::windowChanged, this, &ChangeDetectionDisplay::handleWindowChanged);
             }
