@@ -1,5 +1,6 @@
  #pragma once
 
+#include <QQmlParserStatus>
 #include <QVector3D>
 #include <QtQuick/qquickwindow.h>
 #include <QtGui/QOpenGLFunctions_3_3_Core>
@@ -306,7 +307,7 @@ namespace chameleon {
                     // send varying data to the GPU
                     glUniform1f(_currentTimestampLocation, static_cast<GLfloat>(_duplicatedCurrentTimestamp));
                     glBindVertexArray(_vertexArrayId);
-                    glDrawElements(GL_POINTS, _indices.size(), GL_UNSIGNED_INT, nullptr);
+                    glDrawElements(GL_POINTS, static_cast<GLsizei>(_indices.size()), GL_UNSIGNED_INT, nullptr);
                     glBindVertexArray(0);
                 }
                 checkOpenGLError();
