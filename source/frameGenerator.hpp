@@ -54,9 +54,9 @@ namespace chameleon {
                 if (!_closing) {
                     success = QImage(
                         _pixels.data(),
-                        _imageWidth,
-                        _imageHeight,
-                        4 * _imageWidth,
+                        static_cast<int>(_imageWidth),
+                        static_cast<int>(_imageHeight),
+                        static_cast<int>(4 * _imageWidth),
                         QImage::Format_RGBA8888_Premultiplied
                     ).mirrored().save(filename);
                 }
