@@ -54,9 +54,9 @@ namespace chameleon {
                 if (!_closing) {
                     success = QImage(
                         _pixels.data(),
-                        _imageWidth,
-                        _imageHeight,
-                        4 * _imageWidth,
+                        static_cast<int>(_imageWidth),
+                        static_cast<int>(_imageHeight),
+                        static_cast<int>(4 * _imageWidth),
                         QImage::Format_RGBA8888_Premultiplied
                     ).mirrored().save(filename);
                 }
@@ -136,7 +136,8 @@ namespace chameleon {
         Q_OBJECT
         public:
             FrameGenerator() :
-                _closing(false)
+                _closing(false),
+                _rendererReady(false)
             {
                 connect(this, &QQuickItem::windowChanged, this, &FrameGenerator::handleWindowChanged);
             }
@@ -148,6 +149,7 @@ namespace chameleon {
 
             /// saveFrameTo triggers a frame render and stores the resulting png image to the given file.
             virtual void saveFrameTo(const std::string& filename) {
+                while (!_rendererReady.load(std::memory_order_acquire)) {}
                 if (!_closing.load(std::memory_order_relaxed)) {
                     if (!_frameGeneratorRenderer->saveFrameTo(QString::fromStdString(filename))) {
                         throw std::runtime_error(std::string("saving a frame to '") + filename + "' failed");
@@ -189,6 +191,7 @@ namespace chameleon {
                         &FrameGeneratorRenderer::afterRenderingCallback,
                         Qt::DirectConnection
                     );
+                    _rendererReady.store(true, std::memory_order_release);
                 }
 
                 auto captureArea = QRectF(0, 0, width() * window()->devicePixelRatio(), height() * window()->devicePixelRatio());
@@ -232,6 +235,7 @@ namespace chameleon {
 
         protected:
             std::atomic_bool _closing;
+            std::atomic_bool _rendererReady;
             std::unique_ptr<FrameGeneratorRenderer> _frameGeneratorRenderer;
             QRectF _captureArea;
     };
