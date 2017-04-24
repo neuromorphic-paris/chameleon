@@ -1,12 +1,13 @@
 #pragma once
 
 #include <QQmlParserStatus>
-#include <QtQuick/qquickwindow.h>
+#include <QtCore/QDir>
+#include <QQmlParserStatus>
 #include <QtGui/QOpenGLFunctions_3_3_Core>
-#include <QtQuick/QQuickItem>
 #include <QtGui/QOpenGLContext>
-#include <QImage>
-#include <QDir>
+#include <QtGui/QImage>
+#include <QtQuick/QQuickItem>
+#include <QtQuick/qquickwindow.h>
 
 #include <memory>
 #include <atomic>

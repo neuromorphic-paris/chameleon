@@ -1,11 +1,10 @@
 #pragma once
 
-#include <QColor>
 #include <QQmlParserStatus>
-#include <QtQuick/qquickwindow.h>
 #include <QtGui/QOpenGLFunctions_3_3_Core>
-#include <QtQuick/QQuickItem>
 #include <QtGui/QOpenGLContext>
+#include <QtQuick/QQuickItem>
+#include <QtQuick/qquickwindow.h>
 
 #include <memory>
 #include <atomic>
