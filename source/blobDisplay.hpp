@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QtQuick>
+#include <QtQuick/QtQuick>
 
 #include <atomic>
 #include <unordered_map>
