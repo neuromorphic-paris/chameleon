@@ -25,26 +25,13 @@ namespace chameleon {
             ColorDisplayRenderer(const QSize& canvasSize, const QColor& backgroundColor):
                 _canvasSize(canvasSize),
                 _backgroundColor(backgroundColor),
+                _indices(_canvasSize.width() * _canvasSize.height()),
                 _colors(_canvasSize.width() * _canvasSize.height() * 3, 0),
                 _duplicatedColors(_canvasSize.width() * _canvasSize.height() * 3),
                 _programSetup(false)
             {
-                _indices.reserve(static_cast<std::size_t>(
-                    2 * (_canvasSize.width() * _canvasSize.height() - _canvasSize.width() + _canvasSize.height() - 2)
-                ));
-                for (qint32 y = 0; y < _canvasSize.height() - 1; ++y) {
-                    if (y > 0) {
-                        _indices.push_back(y * _canvasSize.width());
-                    }
-
-                    for (qint32 x = 0; x < _canvasSize.width(); ++x) {
-                        _indices.push_back(x + y * _canvasSize.width());
-                        _indices.push_back(x + (y + 1) * _canvasSize.width());
-                    }
-
-                    if (y < _canvasSize.height() - 2) {
-                        _indices.push_back(_canvasSize.width() - 1 + (y + 1) * _canvasSize.width());
-                    }
+                for (auto indexIterator = _indices.begin(); indexIterator != _indices.end(); ++indexIterator) {
+                    *indexIterator = static_cast<qint32>(std::distance(_indices.begin(), indexIterator));
                 }
                 _coordinates.reserve(_canvasSize.width() * _canvasSize.height() * 2);
                 for (qint32 y = 0; y < _canvasSize.height(); ++y) {
@@ -100,17 +87,17 @@ namespace chameleon {
                             "#version 330 core\n"
                             "in vec2 coordinates;\n"
                             "in vec3 color;\n"
-                            "out vec3 fragmentColor;\n"
+                            "out vec4 geometryColor;\n"
                             "uniform float width;\n"
                             "uniform float height;\n"
                             "void main() {\n"
                             "    gl_Position = vec4(\n"
-                            "        coordinates.x / (width - 1.0) * 2.0 - 1.0,\n"
-                            "        coordinates.y / (height - 1.0) * 2.0 - 1.0,\n"
+                            "        coordinates.x / width * 2.0 - 1.0,\n"
+                            "        coordinates.y / height * 2.0 - 1.0,\n"
                             "        0.0,\n"
                             "        1.0\n"
                             "    );\n"
-                            "    fragmentColor = color;\n"
+                            "    geometryColor = vec4(color[0], color[1], color[2], 1.0);\n"
                             "}\n"
                         );
                         auto vertexShaderContent = vertexShader.c_str();
@@ -125,15 +112,52 @@ namespace chameleon {
                     glCompileShader(vertexShaderId);
                     checkShaderError(vertexShaderId);
 
+                    // compile the geometry shader
+                    const auto geometryShaderId = glCreateShader(GL_GEOMETRY_SHADER);
+                    {
+                        const auto geometryShader = std::string(
+                            "#version 330 core\n"
+                            "layout (points) in;\n"
+                            "layout (triangle_strip, max_vertices = 4) out;\n"
+                            "in vec4 geometryColor[];\n"
+                            "out vec4 fragmentColor;\n"
+                            "uniform float width;\n"
+                            "uniform float height;\n"
+                            "void main() {\n"
+                            "    fragmentColor = geometryColor[0];\n"
+                            "    float pixelWidth = 2.0 / width;\n"
+                            "    float pixelHeight = 2.0 / height;\n"
+                            "    gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y, 0.0, 1.0);\n"
+                            "    EmitVertex();\n"
+                            "    gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y + pixelHeight, 0.0, 1.0);\n"
+                            "    EmitVertex();\n"
+                            "    gl_Position = vec4(gl_in[0].gl_Position.x + pixelWidth, gl_in[0].gl_Position.y, 0.0, 1.0);\n"
+                            "    EmitVertex();\n"
+                            "    gl_Position = vec4(gl_in[0].gl_Position.x + pixelWidth, gl_in[0].gl_Position.y + pixelHeight, 0.0, 1.0);\n"
+                            "    EmitVertex();\n"
+                            "}\n"
+                        );
+                        auto geometryShaderContent = geometryShader.c_str();
+                        auto geometryShaderSize = geometryShader.size();
+                        glShaderSource(
+                            geometryShaderId,
+                            1,
+                            static_cast<const GLchar**>(&geometryShaderContent),
+                            reinterpret_cast<const GLint*>(&geometryShaderSize)
+                        );
+                    }
+                    glCompileShader(geometryShaderId);
+                    checkShaderError(geometryShaderId);
+
                     // compile the fragment shader
                     const auto fragmentShaderId = glCreateShader(GL_FRAGMENT_SHADER);
                     {
                         const auto fragmentShader = std::string(
                             "#version 330 core\n"
-                            "in vec3 fragmentColor;\n"
-                            "out vec4 coloro;\n"
+                            "in vec4 fragmentColor;\n"
+                            "out vec4 color;\n"
                             "void main() {\n"
-                            "    coloro = vec4(fragmentColor, 1.0);\n"
+                            "    color = fragmentColor;\n"
                             "}\n"
                         );
                         auto fragmentShaderContent = fragmentShader.c_str();
@@ -151,9 +175,11 @@ namespace chameleon {
                     // create the shaders pipeline
                     _programId = glCreateProgram();
                     glAttachShader(_programId, vertexShaderId);
+                    glAttachShader(_programId, geometryShaderId);
                     glAttachShader(_programId, fragmentShaderId);
                     glLinkProgram(_programId);
                     glDeleteShader(vertexShaderId);
+                    glDeleteShader(geometryShaderId);
                     glDeleteShader(fragmentShaderId);
                     glUseProgram(_programId);
                     checkProgramError(_programId);
@@ -246,7 +272,7 @@ namespace chameleon {
 
                     // send varying data to the GPU
                     glBindVertexArray(_vertexArrayId);
-                    glDrawElements(GL_TRIANGLE_STRIP, static_cast<GLsizei>(_indices.size()), GL_UNSIGNED_INT, nullptr);
+                    glDrawElements(GL_POINTS, static_cast<GLsizei>(_indices.size()), GL_UNSIGNED_INT, nullptr);
                     glBindVertexArray(0);
                 }
                 checkOpenGLError();
