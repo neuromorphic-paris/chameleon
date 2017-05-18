@@ -35,7 +35,7 @@ namespace chameleon {
             virtual ~FrameGeneratorRenderer() {}
 
             /// setRenderingArea defines the rendering area.
-            virtual void setRenderingArea(const QRectF& captureArea, const int& windowHeight) {
+            virtual void setRenderingArea(QRectF captureArea, int windowHeight) {
                 _captureArea = captureArea;
                 _captureArea.moveTop(windowHeight - _captureArea.top() - _captureArea.height());
             }

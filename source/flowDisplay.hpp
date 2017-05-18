@@ -22,7 +22,7 @@ namespace chameleon {
     class FlowDisplayRenderer : public QObject, public QOpenGLFunctions_3_3_Core {
         Q_OBJECT
         public:
-            FlowDisplayRenderer(const QSize& canvasSize, const float& lengthToSpeedRatio, const float& decay):
+            FlowDisplayRenderer(QSize canvasSize, float lengthToSpeedRatio, float decay):
                 _canvasSize(canvasSize),
                 _lengthToSpeedRatio(lengthToSpeedRatio),
                 _decay(decay),
@@ -56,7 +56,7 @@ namespace chameleon {
             }
 
             /// setRenderingArea defines the rendering area.
-            virtual void setRenderingArea(const QRectF& paintArea, const int& windowHeight) {
+            virtual void setRenderingArea(QRectF paintArea, int windowHeight) {
                 _paintArea = paintArea;
                 _paintArea.moveTop(windowHeight - _paintArea.top() - _paintArea.height());
             }

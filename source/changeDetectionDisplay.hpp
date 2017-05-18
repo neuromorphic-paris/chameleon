@@ -21,12 +21,12 @@ namespace chameleon {
         Q_OBJECT
         public:
             ChangeDetectionDisplayRenderer(
-                const QSize& canvasSize,
-                const float& decay,
-                const QColor& increaseColor,
-                const QColor& idleColor,
-                const QColor& decreaseColor,
-                const QColor& backgroundColor
+                QSize canvasSize,
+                float decay,
+                QColor increaseColor,
+                QColor idleColor,
+                QColor decreaseColor,
+                QColor backgroundColor
             ) :
                 _canvasSize(canvasSize),
                 _decay(decay),
@@ -64,7 +64,7 @@ namespace chameleon {
             }
 
             /// setRenderingArea defines the rendering area.
-            virtual void setRenderingArea(const QRectF& clearArea, const QRectF& paintArea, const int& windowHeight) {
+            virtual void setRenderingArea(QRectF clearArea, QRectF paintArea, int windowHeight) {
                 _clearArea = clearArea;
                 _clearArea.moveTop(windowHeight - _clearArea.top() - _clearArea.height());
                 _paintArea = paintArea;
