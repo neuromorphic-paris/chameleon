@@ -23,10 +23,10 @@ namespace chameleon {
         Q_OBJECT
         public:
             LogarithmicDisplayRenderer(
-                const QSize& canvasSize,
-                const float& discardRatio,
-                const std::size_t& colormap,
-                const QColor& backgroundColor
+                QSize canvasSize,
+                float discardRatio,
+                std::size_t colormap,
+                QColor backgroundColor
             ):
                 _canvasSize(std::move(canvasSize)),
                 _discardRatio(discardRatio),
@@ -62,7 +62,7 @@ namespace chameleon {
             }
 
             /// setRenderingArea defines the rendering area.
-            virtual void setRenderingArea(const QRectF& clearArea, const QRectF& paintArea, const int& windowHeight) {
+            virtual void setRenderingArea(QRectF clearArea, QRectF paintArea, int windowHeight) {
                 _clearArea = clearArea;
                 _clearArea.moveTop(windowHeight - _clearArea.top() - _clearArea.height());
                 _paintArea = paintArea;
@@ -375,7 +375,7 @@ namespace chameleon {
                         auto previousDiscards = _discards;
                         auto sortedTimeDeltas = std::vector<float>();
                         sortedTimeDeltas.reserve(_duplicatedTimeDeltas.size());
-                        for (auto&& timeDelta : _duplicatedTimeDeltas) {
+                        for (auto timeDelta : _duplicatedTimeDeltas) {
                             if (std::isfinite(timeDelta)) {
                                 sortedTimeDeltas.push_back(timeDelta);
                             }

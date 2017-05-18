@@ -16,7 +16,7 @@ namespace chameleon {
     class BackgroundCleanerRenderer : public QObject, public QOpenGLFunctions_3_3_Core {
         Q_OBJECT
         public:
-            BackgroundCleanerRenderer(const QColor& color) :
+            BackgroundCleanerRenderer(QColor color) :
                 _color(color)
             {
             }
@@ -27,7 +27,7 @@ namespace chameleon {
             virtual ~BackgroundCleanerRenderer() {}
 
             /// setRenderingArea defines the clear area.
-            virtual void setRenderingArea(const QRectF& clearArea, const int& windowHeight) {
+            virtual void setRenderingArea(QRectF clearArea, int windowHeight) {
                 _clearArea = clearArea;
                 _clearArea.moveTop(windowHeight - _clearArea.top() - _clearArea.height());
             }

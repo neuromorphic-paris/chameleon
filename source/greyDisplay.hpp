@@ -22,7 +22,7 @@ namespace chameleon {
     class GreyDisplayRenderer : public QObject, public QOpenGLFunctions_3_3_Core {
         Q_OBJECT
         public:
-            GreyDisplayRenderer(const QSize& canvasSize, const QColor& backgroundColor):
+            GreyDisplayRenderer(QSize canvasSize, QColor backgroundColor):
                 _canvasSize(canvasSize),
                 _backgroundColor(backgroundColor),
                 _indices(_canvasSize.width() * _canvasSize.height()),
@@ -52,7 +52,7 @@ namespace chameleon {
             }
 
             /// setRenderingArea defines the rendering area.
-            virtual void setRenderingArea(const QRectF& clearArea, const QRectF& paintArea, const int& windowHeight) {
+            virtual void setRenderingArea(QRectF clearArea, QRectF paintArea, int windowHeight) {
                 _clearArea = clearArea;
                 _clearArea.moveTop(windowHeight - _clearArea.top() - _clearArea.height());
                 _paintArea = paintArea;
