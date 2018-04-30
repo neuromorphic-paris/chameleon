@@ -1,33 +1,41 @@
+local qt = require 'qt'
+
+local dependencies = {
+    blob_display = {'background_cleaner'},
+    flow_display = {'background_cleaner'},
+    frame_generator = {'grey_display'},
+}
+setmetatable(dependencies, {__index = function() return {} end})
+
 solution 'chameleon'
-    configurations {'Release', 'Debug'}
+    configurations {'release', 'debug'}
     location 'build'
-
-    newaction {
-        trigger = "install",
-        description = "Install the library",
-        execute = function ()
-            os.execute('rm -rf /usr/local/include/chameleon')
-            os.mkdir('/usr/local/include/chameleon')
-            for index, filename in pairs(os.matchfiles('source/*.hpp')) do
-                os.copyfile(filename, path.join('/usr/local/include/chameleon', path.getname(filename)))
+    for index, file in pairs(os.matchfiles('test/*.cpp')) do
+        local name = path.getbasename(file)
+        project('test_' .. name)
+            kind 'ConsoleApp'
+            language 'C++'
+            location 'build'
+            files {'source/' .. name .. '.hpp', 'test/' .. name .. '.cpp'}
+            buildoptions {'-std=c++11'}
+            linkoptions {'-std=c++11'}
+            files(qt.moc({'source/' .. name .. '.hpp'}, 'build/moc'))
+            for index, dependency_name in pairs(dependencies[name]) do
+                files(qt.moc({'source/' .. dependency_name .. '.hpp'}, 'build/moc'))
             end
-
-            print(string.char(27) .. '[32mChameleon library installed.' .. string.char(27) .. '[0m')
-            os.exit()
-        end
-    }
-
-    newaction {
-        trigger = 'uninstall',
-        description = 'Remove all the files installed during build processes',
-        execute = function ()
-            os.execute('rm -rf /usr/local/include/chameleon')
-            print(string.char(27) .. '[32mChameleon library uninstalled.' .. string.char(27) .. '[0m')
-            os.exit()
-        end
-    }
-
-    project 'chameleonTest'
-        -- General settings
-        kind 'ConsoleApp'
-        language 'C++'
+            includedirs(qt.includedirs())
+            libdirs(qt.libdirs())
+            links(qt.links())
+            buildoptions(qt.buildoptions())
+            linkoptions(qt.linkoptions())
+            configuration 'release'
+                targetdir 'build/release'
+                defines {'NDEBUG'}
+                flags {'OptimizeSpeed'}
+            configuration 'debug'
+                targetdir 'build/debug'
+                defines {'DEBUG'}
+                flags {'Symbols'}
+            configuration 'linux'
+                links {'pthread'}
+    end
