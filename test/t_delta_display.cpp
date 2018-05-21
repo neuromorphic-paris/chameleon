@@ -1,4 +1,4 @@
-#include "../source/logarithmic_display.hpp"
+#include "../source/t_delta_display.hpp"
 #include <QtGui/QGuiApplication>
 #include <QtQml/QQmlApplicationEngine>
 #include <atomic>
@@ -14,7 +14,7 @@ struct event {
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
-    qmlRegisterType<chameleon::logarithmic_display>("Chameleon", 1, 0, "LogarithmicDisplay");
+    qmlRegisterType<chameleon::t_delta_display>("Chameleon", 1, 0, "LogarithmicDisplay");
     QQmlApplicationEngine application_engine;
     application_engine.loadData(R""(
         import QtQuick 2.3
@@ -30,12 +30,12 @@ int main(int argc, char* argv[]) {
                 running: true
                 repeat: true
                 onTriggered: {
-                    logarithmic_display.trigger_draw();
+                    t_delta_display.trigger_draw();
                 }
             }
             LogarithmicDisplay {
-                id: logarithmic_display
-                objectName: "logarithmic_display"
+                id: t_delta_display
+                objectName: "t_delta_display"
                 canvas_size: "320x240"
                 width: window.width
                 height: window.height
@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
         format.setProfile(QSurfaceFormat::CoreProfile);
         window->setFormat(format);
     }
-    auto logarithmic_display = window->findChild<chameleon::logarithmic_display*>("logarithmic_display");
+    auto t_delta_display = window->findChild<chameleon::t_delta_display*>("t_delta_display");
     std::atomic_bool running(true);
     std::thread loop([&]() {
         std::random_device random_device;
@@ -63,7 +63,7 @@ int main(int argc, char* argv[]) {
         const auto time_reference = std::chrono::high_resolution_clock::now();
         while (running.load(std::memory_order_relaxed)) {
             for (std::size_t index = 0; index < 1000; ++index) {
-                logarithmic_display->push(
+                t_delta_display->push(
                     event{static_cast<uint16_t>(
                               static_cast<uint64_t>(
                                   320.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
