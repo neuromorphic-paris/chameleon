@@ -155,33 +155,34 @@ namespace chameleon {
         protected:
         /// managed_blob represents a gaussian blob.
         struct managed_blob {
-            double x;
-            double y;
-            double squared_sigma_x;
-            double sigma_xy;
-            double squared_sigma_y;
+            float x;
+            float y;
+            float squared_sigma_x;
+            float sigma_xy;
+            float squared_sigma_y;
         };
 
         /// ellipse represents an ellipse's parameter.
         struct ellipse {
-            double major_radius;
-            double minor_radius;
-            double angle;
+            float major_radius;
+            float minor_radius;
+            float angle;
         };
 
         /// blob_to_ellipse calculates an ellipse's parameters from a blob.
-        static ellipse blob_to_ellipse(managed_blob blob, double confidence) {
+        static ellipse blob_to_ellipse(managed_blob blob, float confidence) {
             const auto delta_square_root =
-                std::sqrt(std::pow(blob.squared_sigma_x - blob.squared_sigma_y, 2) + 4 * std::pow(blob.sigma_xy, 2))
+                std::sqrt(
+                    std::pow(blob.squared_sigma_x - blob.squared_sigma_y, 2.0f) + 4 * std::pow(blob.sigma_xy, 2.0f))
                 / 2;
             const auto first_order_coefficient = (blob.squared_sigma_x + blob.squared_sigma_y) / 2;
             return ellipse{
                 confidence * std::sqrt(first_order_coefficient + delta_square_root),
                 confidence * std::sqrt(first_order_coefficient - delta_square_root),
                 blob.squared_sigma_y == blob.squared_sigma_x ?
-                    M_PI / 4 :
+                    static_cast<float>(M_PI) / 4 :
                     (std::atan(2 * blob.sigma_xy / (blob.squared_sigma_x - blob.squared_sigma_y))
-                     + (blob.squared_sigma_y > blob.squared_sigma_x ? M_PI : 0))
+                     + (blob.squared_sigma_y > blob.squared_sigma_x ? static_cast<float>(M_PI) : 0.0f))
                         / 2,
             };
         }

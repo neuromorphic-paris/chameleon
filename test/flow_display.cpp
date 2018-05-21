@@ -8,12 +8,12 @@
 #include <thread>
 
 struct event {
+    uint64_t t;
     uint16_t x;
     uint16_t y;
-    uint64_t t;
     float vx;
     float vy;
-};
+} __attribute__((packed));
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
         Window {
             id: window
             visible: true
-            width: 304
+            width: 320
             height: 240
             Timer {
                 interval: 20
@@ -44,7 +44,7 @@ int main(int argc, char* argv[]) {
             FlowDisplay {
                 id: flow_display
                 objectName: "flow_display"
-                canvas_size: "304x240"
+                canvas_size: "320x240"
                 width: window.width
                 height: window.height
             }
@@ -71,15 +71,15 @@ int main(int argc, char* argv[]) {
         while (running.load(std::memory_order_relaxed)) {
             for (std::size_t index = 0; index < 1000; ++index) {
                 flow_display->push(event{
+                    t,
                     static_cast<uint16_t>(
                         static_cast<uint64_t>(
-                            304.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
-                        % 304),
+                            320.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
+                        % 320),
                     static_cast<uint16_t>(
                         static_cast<uint64_t>(
                             240.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
                         % 240),
-                    t,
                     speed_distribution(engine),
                     speed_distribution(engine),
                 });
