@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QtQuick/QtQuick>
-
 #include <array>
 #include <atomic>
 #include <cmath>
