@@ -8,12 +8,12 @@
 #include <thread>
 
 struct blob {
-    double x;
-    double y;
-    double squared_sigma_x;
-    double sigma_xy;
-    double squared_sigma_y;
-};
+    float x;
+    float y;
+    float squared_sigma_x;
+    float sigma_xy;
+    float squared_sigma_y;
+} __attribute__((packed));
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
         Window {
             id: window
             visible: true
-            width: 304
+            width: 320
             height: 240
             Timer {
                 interval: 20
@@ -44,7 +44,7 @@ int main(int argc, char* argv[]) {
             BlobDisplay {
                 id: blob_display
                 objectName: "blob_display"
-                canvas_size: "304x240"
+                canvas_size: "320x240"
                 width: window.width
                 height: window.height
                 stroke_color: "#7eaa5f"
@@ -70,22 +70,27 @@ int main(int argc, char* argv[]) {
         for (std::size_t id = 0; id < 3; ++id) {
             blob_display->insert(
                 id,
-                blob{static_cast<double>(102 + 50 * id),
-                     120,
-                     std::pow(20 * (std::cos(2 * M_PI * (t - id * 1e6 / 3) / 1e6) + 1.5), 2),
-                     0,
-                     std::pow(20 * (std::sin(2 * M_PI * (t - id * 1e6 / 3) / 1e6) + 1.5), 2)});
+                blob{
+                    static_cast<float>(102 + 50 * id),
+                    120,
+                    std::pow(20 * (std::cos(2 * static_cast<float>(M_PI) * (t - id * 1e6f / 3) / 1e6f) + 1.5f), 2.0f),
+                    0,
+                    std::pow(20 * (std::sin(2 * static_cast<float>(M_PI) * (t - id * 1e6f / 3) / 1e6f) + 1.5f), 2.0f)});
         }
         while (running.load(std::memory_order_relaxed)) {
             for (std::size_t index = 0; index < 10; ++index) {
                 for (std::size_t id = 0; id < 3; ++id) {
                     blob_display->update(
                         id,
-                        blob{static_cast<double>(102 + 50 * id),
+                        blob{static_cast<float>(102 + 50 * id),
                              120,
-                             std::pow(20 * (std::cos(2 * M_PI * (t - id * 1e6 / 3) / 1e6) + 1.5), 2),
+                             std::pow(
+                                 20 * (std::cos(2 * static_cast<float>(M_PI) * (t - id * 1e6f / 3) / 1e6f) + 1.5f),
+                                 2.0f),
                              0,
-                             std::pow(20 * (std::sin(2 * M_PI * (t - id * 1e6 / 3) / 1e6) + 1.5), 2)});
+                             std::pow(
+                                 20 * (std::sin(2 * static_cast<float>(M_PI) * (t - id * 1e6f / 3) / 1e6f) + 1.5f),
+                                 2.0f)});
                 }
                 t += 2000;
             }
