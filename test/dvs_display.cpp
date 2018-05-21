@@ -1,4 +1,4 @@
-#include "../source/change_detection_display.hpp"
+#include "../source/dvs_display.hpp"
 #include <QtGui/QGuiApplication>
 #include <QtQml/QQmlApplicationEngine>
 #include <atomic>
@@ -15,7 +15,7 @@ struct event {
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
-    qmlRegisterType<chameleon::change_detection_display>("Chameleon", 1, 0, "ChangeDetectionDisplay");
+    qmlRegisterType<chameleon::dvs_display>("Chameleon", 1, 0, "ChangeDetectionDisplay");
     QQmlApplicationEngine application_engine;
     application_engine.loadData(R""(
         import QtQuick 2.3
@@ -31,12 +31,12 @@ int main(int argc, char* argv[]) {
                 running: true
                 repeat: true
                 onTriggered: {
-                    change_detection_display.trigger_draw();
+                    dvs_display.trigger_draw();
                 }
             }
             ChangeDetectionDisplay {
-                id: change_detection_display
-                objectName: "change_detection_display"
+                id: dvs_display
+                objectName: "dvs_display"
                 canvas_size: "320x240"
                 width: window.width
                 height: window.height
@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
         format.setProfile(QSurfaceFormat::CoreProfile);
         window->setFormat(format);
     }
-    auto change_detection_display = window->findChild<chameleon::change_detection_display*>("change_detection_display");
+    auto dvs_display = window->findChild<chameleon::dvs_display*>("dvs_display");
     std::atomic_bool running(true);
     std::thread loop([&]() {
         std::random_device random_device;
@@ -62,7 +62,7 @@ int main(int argc, char* argv[]) {
         const auto time_reference = std::chrono::high_resolution_clock::now();
         while (running.load(std::memory_order_relaxed)) {
             for (std::size_t index = 0; index < 1000; ++index) {
-                change_detection_display->push(event{
+                dvs_display->push(event{
                     t,
                     static_cast<uint16_t>(
                         static_cast<uint64_t>(
