@@ -21,9 +21,9 @@ namespace chameleon {
     class flow_display_renderer : public QObject, public QOpenGLFunctions_3_3_Core {
         Q_OBJECT
         public:
-        flow_display_renderer(QSize canvas_size, float speed_to_length_ratio, float decay) :
+        flow_display_renderer(QSize canvas_size, float speed_to_length, float decay) :
             _canvas_size(canvas_size),
-            _speed_to_length_ratio(speed_to_length_ratio),
+            _speed_to_length(speed_to_length),
             _decay(decay),
             _duplicated_ts_and_flows(_canvas_size.width() * _canvas_size.height() * 3),
             _program_setup(false) {
@@ -138,7 +138,7 @@ namespace chameleon {
                         out vec4 fragment_color;
                         uniform float width;
                         uniform float height;
-                        uniform float speed_to_length_ratio;
+                        uniform float speed_to_length;
                         uniform float decay;
                         uniform float current_t;
                         const vec3 color_table[7] = vec3[](
@@ -154,7 +154,7 @@ namespace chameleon {
                                 return;
                             }
                             vec2 speed_vector = vec2(geometry_t_and_flow[0].y, geometry_t_and_flow[0].z)
-                                                * speed_to_length_ratio;
+                                                * speed_to_length;
                             float speed = length(speed_vector);
                             if (speed == 0) {
                                 return;
@@ -264,8 +264,8 @@ namespace chameleon {
                 glUniform1f(glGetUniformLocation(_program_id, "width"), static_cast<GLfloat>(_canvas_size.width()));
                 glUniform1f(glGetUniformLocation(_program_id, "height"), static_cast<GLfloat>(_canvas_size.height()));
                 glUniform1f(
-                    glGetUniformLocation(_program_id, "speed_to_length_ratio"),
-                    static_cast<GLfloat>(_speed_to_length_ratio));
+                    glGetUniformLocation(_program_id, "speed_to_length"),
+                    static_cast<GLfloat>(_speed_to_length));
                 glUniform1f(glGetUniformLocation(_program_id, "decay"), static_cast<GLfloat>(_decay));
                 _current_t_location = glGetUniformLocation(_program_id, "current_t");
             } else {
@@ -356,7 +356,7 @@ namespace chameleon {
         }
 
         QSize _canvas_size;
-        float _speed_to_length_ratio;
+        float _speed_to_length;
         float _decay;
         float _current_t;
         float _duplicated_current_t;
@@ -378,10 +378,10 @@ namespace chameleon {
         Q_OBJECT
         Q_INTERFACES(QQmlParserStatus)
         Q_PROPERTY(QSize canvas_size READ canvas_size WRITE set_canvas_size)
-        Q_PROPERTY(float speed_to_length_ratio READ speed_to_length_ratio WRITE set_speed_to_length_ratio)
+        Q_PROPERTY(float speed_to_length READ speed_to_length WRITE set_speed_to_length)
         Q_PROPERTY(float decay READ decay WRITE set_decay)
         public:
-        flow_display() : _ready(false), _renderer_ready(false), _speed_to_length_ratio(100000), _decay(500000) {
+        flow_display() : _ready(false), _renderer_ready(false), _speed_to_length(100000), _decay(500000) {
             connect(this, &QQuickItem::windowChanged, this, &flow_display::handle_window_changed);
         }
         flow_display(const flow_display&) = delete;
@@ -407,19 +407,19 @@ namespace chameleon {
             return _canvas_size;
         }
 
-        /// set_speed_to_length_ratio defines the length in pixels of the arrow representing a one-pixel-per-microsecond
+        /// set_speed_to_length defines the length in pixels of the arrow representing a one-pixel-per-microsecond
         /// speed. The length to speed ratio will be passed to the openGL renderer, therefore it should only be set
         /// during qml construction.
-        virtual void set_speed_to_length_ratio(float speed_to_length_ratio) {
+        virtual void set_speed_to_length(float speed_to_length) {
             if (_ready.load(std::memory_order_acquire)) {
-                throw std::logic_error("speed_to_length_ratio can only be set during qml construction");
+                throw std::logic_error("speed_to_length can only be set during qml construction");
             }
-            _speed_to_length_ratio = speed_to_length_ratio;
+            _speed_to_length = speed_to_length;
         }
 
-        /// speed_to_length_ratio returns the currently used speed_to_length_ratio.
-        virtual float speed_to_length_ratio() const {
-            return _speed_to_length_ratio;
+        /// speed_to_length returns the currently used speed_to_length.
+        virtual float speed_to_length() const {
+            return _speed_to_length;
         }
 
         /// set_decay defines the flow decay.
@@ -469,7 +469,7 @@ namespace chameleon {
             if (_ready.load(std::memory_order_relaxed)) {
                 if (!_flow_display_renderer) {
                     _flow_display_renderer = std::unique_ptr<flow_display_renderer>(
-                        new flow_display_renderer(_canvas_size, _speed_to_length_ratio, _decay));
+                        new flow_display_renderer(_canvas_size, _speed_to_length, _decay));
                     connect(
                         window(),
                         &QQuickWindow::beforeRendering,
@@ -532,7 +532,7 @@ namespace chameleon {
         std::atomic_bool _ready;
         std::atomic_bool _renderer_ready;
         QSize _canvas_size;
-        float _speed_to_length_ratio;
+        float _speed_to_length;
         float _decay;
         std::unique_ptr<flow_display_renderer> _flow_display_renderer;
         QRectF _clear_area;
