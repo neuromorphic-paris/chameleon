@@ -65,14 +65,14 @@ int main(int argc, char* argv[]) {
             for (std::size_t index = 0; index < 1000; ++index) {
                 logarithmic_display->push(
                     event{static_cast<uint16_t>(
-                                static_cast<uint64_t>(
-                                    304.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
-                                % 304),
-                            static_cast<uint16_t>(
-                                static_cast<uint64_t>(
-                                    240.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
-                                % 240),
-                            t_delta_distribution(engine)});
+                              static_cast<uint64_t>(
+                                  304.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
+                              % 304),
+                          static_cast<uint16_t>(
+                              static_cast<uint64_t>(
+                                  240.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
+                              % 240),
+                          t_delta_distribution(engine)});
                 t += 20;
             }
             std::this_thread::sleep_until(time_reference + std::chrono::microseconds(t));

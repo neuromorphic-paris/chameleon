@@ -5,7 +5,6 @@
 #include <QtGui/QOpenGLFunctions_3_3_Core>
 #include <QtQuick/QQuickItem>
 #include <QtQuick/qquickwindow.h>
-
 #include <array>
 #include <atomic>
 #include <limits>

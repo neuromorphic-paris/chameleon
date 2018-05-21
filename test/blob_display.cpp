@@ -71,10 +71,10 @@ int main(int argc, char* argv[]) {
             blob_display->insert(
                 id,
                 blob{static_cast<double>(102 + 50 * id),
-                       120,
-                       std::pow(20 * (std::cos(2 * M_PI * (t - id * 1e6 / 3) / 1e6) + 1.5), 2),
-                       0,
-                       std::pow(20 * (std::sin(2 * M_PI * (t - id * 1e6 / 3) / 1e6) + 1.5), 2)});
+                     120,
+                     std::pow(20 * (std::cos(2 * M_PI * (t - id * 1e6 / 3) / 1e6) + 1.5), 2),
+                     0,
+                     std::pow(20 * (std::sin(2 * M_PI * (t - id * 1e6 / 3) / 1e6) + 1.5), 2)});
         }
         while (running.load(std::memory_order_relaxed)) {
             for (std::size_t index = 0; index < 10; ++index) {
@@ -82,10 +82,10 @@ int main(int argc, char* argv[]) {
                     blob_display->update(
                         id,
                         blob{static_cast<double>(102 + 50 * id),
-                               120,
-                               std::pow(20 * (std::cos(2 * M_PI * (t - id * 1e6 / 3) / 1e6) + 1.5), 2),
-                               0,
-                               std::pow(20 * (std::sin(2 * M_PI * (t - id * 1e6 / 3) / 1e6) + 1.5), 2)});
+                             120,
+                             std::pow(20 * (std::cos(2 * M_PI * (t - id * 1e6 / 3) / 1e6) + 1.5), 2),
+                             0,
+                             std::pow(20 * (std::sin(2 * M_PI * (t - id * 1e6 / 3) / 1e6) + 1.5), 2)});
                 }
                 t += 2000;
             }
