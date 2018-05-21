@@ -11,7 +11,7 @@ struct event {
     uint16_t x;
     uint16_t y;
     float exposure;
-};
+} __attribute__((packed));
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
         Window {
             id: window
             visible: true
-            width: 304
+            width: 320
             height: 240
             Timer {
                 interval: 20
@@ -45,7 +45,7 @@ int main(int argc, char* argv[]) {
             GreyDisplay {
                 id: grey_display
                 objectName: "grey_display"
-                canvas_size: "304x240"
+                canvas_size: "320x240"
                 width: window.width
                 height: window.height
             }
@@ -80,8 +80,8 @@ int main(int argc, char* argv[]) {
                 grey_display->push(
                     event{static_cast<uint16_t>(
                               static_cast<uint64_t>(
-                                  304.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
-                              % 304),
+                                  320.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
+                              % 320),
                           static_cast<uint16_t>(
                               static_cast<uint64_t>(
                                   240.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)

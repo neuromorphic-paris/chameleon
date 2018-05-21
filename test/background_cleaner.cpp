@@ -13,7 +13,7 @@ int main(int argc, char* argv[]) {
         Window {
             id: window
             visible: true
-            width: 304
+            width: 320
             height: 240
             BackgroundCleaner {
                 id: background_cleaner

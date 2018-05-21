@@ -264,8 +264,7 @@ namespace chameleon {
                 glUniform1f(glGetUniformLocation(_program_id, "width"), static_cast<GLfloat>(_canvas_size.width()));
                 glUniform1f(glGetUniformLocation(_program_id, "height"), static_cast<GLfloat>(_canvas_size.height()));
                 glUniform1f(
-                    glGetUniformLocation(_program_id, "speed_to_length"),
-                    static_cast<GLfloat>(_speed_to_length));
+                    glGetUniformLocation(_program_id, "speed_to_length"), static_cast<GLfloat>(_speed_to_length));
                 glUniform1f(glGetUniformLocation(_program_id, "decay"), static_cast<GLfloat>(_decay));
                 _current_t_location = glGetUniformLocation(_program_id, "current_t");
             } else {

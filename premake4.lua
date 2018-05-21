@@ -12,7 +12,7 @@ solution 'chameleon'
     location 'build'
     for index, file in pairs(os.matchfiles('test/*.cpp')) do
         local name = path.getbasename(file)
-        project('test_' .. name)
+        project(name)
             kind 'ConsoleApp'
             language 'C++'
             location 'build'
