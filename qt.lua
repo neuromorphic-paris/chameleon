@@ -62,11 +62,11 @@ function qt.moc(files, target_directory, os_to_configuration)
     os.mkdir(target_directory)
     local generated_files = {}
     for index, file in pairs(files) do
-        local target_file = target_directory .. '/' .. path.getbasename(file) .. '.cpp'
+        local target_file = target_directory .. '/' .. path.getname(file) .. '.cpp'
         if os.execute(
             configuration.moc
             .. ' -I\'' .. configuration.qml_includedir .. '\''
-            .. ' -o \'' .. target_file.. '\''
+            .. ' -o \'' .. target_file .. '\''
             .. ' \''.. file .. '\''
         ) ~= 0 then
             print('Qt error: running moc on ' .. file .. ' failed')
