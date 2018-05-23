@@ -21,7 +21,7 @@ namespace chameleon {
         blob_display(QQuickItem* parent = nullptr) :
             QQuickPaintedItem(parent),
             _brush(Qt::transparent, Qt::SolidPattern),
-            _confidence(1.96) {
+            _confidence(1.96f) {
             _pen.setColor(Qt::black);
             _pen.setWidthF(1);
             _accessing_blobs.clear(std::memory_order_release);
