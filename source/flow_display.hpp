@@ -173,7 +173,7 @@ namespace chameleon {
                                         float_index - integer_index),
                                     alpha);
                             }
-                            vec2 origin = vec2(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y);
+                            vec2 origin = vec2(gl_in[0].gl_Position.x + 0.5, gl_in[0].gl_Position.y + 0.5);
                             vec2 tip = origin + speed_vector;
                             gl_Position = vec4(origin.x / width * 2.0 - 1.0, origin.y / height * 2.0 - 1.0, 0.0, 1.0);
                             EmitVertex();
