@@ -19,10 +19,12 @@ before_install:
             brew update
             brew install premake
             brew install clang-format
+            brew install qt
         fi
     - |
         if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
             sudo apt-get -qq update -y
+            sudo apt-get install qtbase5-dev qtdeclarative5-dev -y
             sudo apt-get install premake4 -y
             sudo apt-get install clang-format -y
             sudo ln -s /usr/bin/make /usr/bin/gmake
