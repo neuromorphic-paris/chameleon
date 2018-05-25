@@ -15,14 +15,14 @@ matrix:
 
 before_install:
     - |
-        if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
+        if [ "$TRAVIS_OS_NAME" = 'osx' ]; then
             brew update
             brew install premake
             brew install clang-format
             brew install qt
         fi
     - |
-        if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+        if [ "$TRAVIS_OS_NAME" = 'linux' ]; then
             sudo apt-get -qq update -y
             sudo apt-get install qtbase5-dev qtdeclarative5-dev -y
             sudo apt-get install premake4 -y
@@ -33,7 +33,7 @@ before_install:
 script:
     - |
         valid=true
-        for filename in 'source/*.hpp' 'test/*.cpp'; do
+        for filename in source/*.hpp test/*.cpp; do
             formatted_filename="$(dirname $filename)/formatted_$(basename $filename)"
             clang-format $filename > $formatted_filename
             if [ "$(diff $filename $formatted_filename)" != '' ]; then
