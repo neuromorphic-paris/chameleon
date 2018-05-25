@@ -618,9 +618,8 @@ namespace chameleon {
         void sync() {
             if (_ready.load(std::memory_order_relaxed)) {
                 if (!_t_delta_display_renderer) {
-                    _t_delta_display_renderer =
-                        std::unique_ptr<t_delta_display_renderer>(new t_delta_display_renderer(
-                            _canvas_size, _discard_ratio, static_cast<std::size_t>(_colormap), _background_color));
+                    _t_delta_display_renderer = std::unique_ptr<t_delta_display_renderer>(new t_delta_display_renderer(
+                        _canvas_size, _discard_ratio, static_cast<std::size_t>(_colormap), _background_color));
                     connect(
                         window(),
                         &QQuickWindow::beforeRendering,
@@ -690,8 +689,7 @@ namespace chameleon {
         /// handle_window_changed must be triggered after a window transformation.
         void handle_window_changed(QQuickWindow* window) {
             if (window) {
-                connect(
-                    window, &QQuickWindow::beforeSynchronizing, this, &t_delta_display::sync, Qt::DirectConnection);
+                connect(window, &QQuickWindow::beforeSynchronizing, this, &t_delta_display::sync, Qt::DirectConnection);
                 connect(
                     window,
                     &QQuickWindow::sceneGraphInvalidated,

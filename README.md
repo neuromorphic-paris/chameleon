@@ -26,11 +26,11 @@ Chameleon relies on [Premake 4.x](https://github.com/premake/premake-4.x) (x ≥
   `ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"`.
 
   [Qt 5.x](https://www.qt.io) is required to host the components. Follow these steps to install it:
-    - __Debian / Ubuntu__: Open a terminal and execute the command `sudo apt-get install qtbase5-dev qtdeclarative5-dev`.
+    - __Debian / Ubuntu__: Open a terminal and execute the command `sudo apt install qtbase5-dev qtdeclarative5-dev`.
     - __OS X__: Open a terminal and execute the command `brew install qt`.
 
 [ClangFormat](https://clang.llvm.org/docs/ClangFormat.html) is used to unify coding styles. Follow these steps to install it:
-- __Debian / Ubuntu__: Open a terminal and execute the command `sudo apt-get install clang-format`.
+- __Debian / Ubuntu__: Open a terminal and execute the command `sudo apt install clang-format`.
 - __OS X__: Open a terminal and execute the command `brew install clang-format`.
 
 ## Test

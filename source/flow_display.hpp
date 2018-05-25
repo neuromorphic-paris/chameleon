@@ -380,7 +380,7 @@ namespace chameleon {
         Q_PROPERTY(float speed_to_length READ speed_to_length WRITE set_speed_to_length)
         Q_PROPERTY(float decay READ decay WRITE set_decay)
         public:
-        flow_display() : _ready(false), _renderer_ready(false), _speed_to_length(100000), _decay(500000) {
+        flow_display() : _ready(false), _renderer_ready(false), _speed_to_length(1e6), _decay(1e5) {
             connect(this, &QQuickItem::windowChanged, this, &flow_display::handle_window_changed);
         }
         flow_display(const flow_display&) = delete;

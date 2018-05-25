@@ -557,9 +557,8 @@ namespace chameleon {
         void sync() {
             if (_ready.load(std::memory_order_relaxed)) {
                 if (!_dvs_display_renderer) {
-                    _dvs_display_renderer =
-                        std::unique_ptr<dvs_display_renderer>(new dvs_display_renderer(
-                            _canvas_size, _decay, _increase_color, _idle_color, _decrease_color, _background_color));
+                    _dvs_display_renderer = std::unique_ptr<dvs_display_renderer>(new dvs_display_renderer(
+                        _canvas_size, _decay, _increase_color, _idle_color, _decrease_color, _background_color));
                     connect(
                         window(),
                         &QQuickWindow::beforeRendering,
@@ -611,18 +610,9 @@ namespace chameleon {
         /// handle_window_changed must be triggered after a window change.
         void handle_window_changed(QQuickWindow* window) {
             if (window) {
+                connect(window, &QQuickWindow::beforeSynchronizing, this, &dvs_display::sync, Qt::DirectConnection);
                 connect(
-                    window,
-                    &QQuickWindow::beforeSynchronizing,
-                    this,
-                    &dvs_display::sync,
-                    Qt::DirectConnection);
-                connect(
-                    window,
-                    &QQuickWindow::sceneGraphInvalidated,
-                    this,
-                    &dvs_display::cleanup,
-                    Qt::DirectConnection);
+                    window, &QQuickWindow::sceneGraphInvalidated, this, &dvs_display::cleanup, Qt::DirectConnection);
                 window->setClearBeforeRendering(false);
             }
         }
