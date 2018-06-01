@@ -17,11 +17,11 @@
 /// chameleon provides Qt components for event stream display.
 namespace chameleon {
 
-    /// t_delta_display_renderer handles openGL calls for a display.
-    class t_delta_display_renderer : public QObject, public QOpenGLFunctions_3_3_Core {
+    /// delta_t_display_renderer handles openGL calls for a display.
+    class delta_t_display_renderer : public QObject, public QOpenGLFunctions_3_3_Core {
         Q_OBJECT
         public:
-        t_delta_display_renderer(
+        delta_t_display_renderer(
             QSize canvas_size,
             float discard_ratio,
             std::size_t colormap,
@@ -31,8 +31,8 @@ namespace chameleon {
             _colormap(colormap),
             _background_color(background_color),
             _indices(_canvas_size.width() * _canvas_size.height()),
-            _t_deltas(_canvas_size.width() * _canvas_size.height(), std::numeric_limits<float>::infinity()),
-            _duplicated_t_deltas(_canvas_size.width() * _canvas_size.height()),
+            _delta_ts(_canvas_size.width() * _canvas_size.height(), std::numeric_limits<float>::infinity()),
+            _duplicated_delta_ts(_canvas_size.width() * _canvas_size.height()),
             _discards_changed(false),
             _automatic_calibration(true),
             _program_setup(false) {
@@ -46,14 +46,14 @@ namespace chameleon {
                     _coordinates.push_back(static_cast<float>(y));
                 }
             }
-            _accessing_t_deltas.clear(std::memory_order_release);
+            _accessing_delta_ts.clear(std::memory_order_release);
             _accessing_discards.clear(std::memory_order_release);
         }
-        t_delta_display_renderer(const t_delta_display_renderer&) = delete;
-        t_delta_display_renderer(t_delta_display_renderer&&) = default;
-        t_delta_display_renderer& operator=(const t_delta_display_renderer&) = delete;
-        t_delta_display_renderer& operator=(t_delta_display_renderer&&) = default;
-        virtual ~t_delta_display_renderer() {
+        delta_t_display_renderer(const delta_t_display_renderer&) = delete;
+        delta_t_display_renderer(delta_t_display_renderer&&) = default;
+        delta_t_display_renderer& operator=(const delta_t_display_renderer&) = delete;
+        delta_t_display_renderer& operator=(delta_t_display_renderer&&) = default;
+        virtual ~delta_t_display_renderer() {
             glDeleteBuffers(2, _vertex_buffers_ids.data());
             glDeleteVertexArrays(1, &_vertex_array_id);
         }
@@ -92,19 +92,19 @@ namespace chameleon {
         void push(Event event) {
             const auto index =
                 static_cast<std::size_t>(event.x) + static_cast<std::size_t>(event.y) * _canvas_size.width();
-            while (_accessing_t_deltas.test_and_set(std::memory_order_acquire)) {
+            while (_accessing_delta_ts.test_and_set(std::memory_order_acquire)) {
             }
-            _t_deltas[index] = static_cast<float>(event.t_delta);
-            _accessing_t_deltas.clear(std::memory_order_release);
+            _delta_ts[index] = static_cast<float>(event.delta_t);
+            _accessing_delta_ts.clear(std::memory_order_release);
         }
 
         /// assign sets all the pixels at once.
         template <typename Iterator>
         void assign(Iterator begin, Iterator end) {
-            while (_accessing_t_deltas.test_and_set(std::memory_order_acquire)) {
+            while (_accessing_delta_ts.test_and_set(std::memory_order_acquire)) {
             }
-            _t_deltas.assign(begin, end);
-            _accessing_t_deltas.clear(std::memory_order_release);
+            _delta_ts.assign(begin, end);
+            _accessing_delta_ts.clear(std::memory_order_release);
         }
 
         signals:
@@ -128,7 +128,7 @@ namespace chameleon {
                     std::string vertex_shader(R""(
                         #version 330 core
                         in vec2 coordinates;
-                        in float t_delta;
+                        in float delta_t;
                         out vec4 geometry_color;
                         uniform float width;
                         uniform float height;
@@ -176,7 +176,7 @@ namespace chameleon {
                         void main() {
                             gl_Position =
                                 vec4(coordinates.x / width * 2.0 - 1.0, coordinates.y / height * 2.0 - 1.0, 0.0, 1.0);
-                            float exposure = clamp(slope * log(t_delta) + intercept, 0.0, 1.0) * (float(color_table_size) - 2.0);
+                            float exposure = clamp(slope * log(delta_t) + intercept, 0.0, 1.0) * (float(color_table_size) - 2.0);
                             geometry_color =
                                 mix(color_table[int(exposure)],
                                     color_table[int(exposure) + 1],
@@ -276,8 +276,8 @@ namespace chameleon {
                 glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertex_buffers_ids));
                 glBufferData(
                     GL_ARRAY_BUFFER,
-                    _duplicated_t_deltas.size() * sizeof(decltype(_duplicated_t_deltas)::value_type),
-                    _duplicated_t_deltas.data(),
+                    _duplicated_delta_ts.size() * sizeof(decltype(_duplicated_delta_ts)::value_type),
+                    _duplicated_delta_ts.data(),
                     GL_DYNAMIC_DRAW);
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertex_buffers_ids));
                 glBufferData(
@@ -293,8 +293,8 @@ namespace chameleon {
                 glEnableVertexAttribArray(glGetAttribLocation(_program_id, "coordinates"));
                 glVertexAttribPointer(glGetAttribLocation(_program_id, "coordinates"), 2, GL_FLOAT, GL_FALSE, 0, 0);
                 glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertex_buffers_ids));
-                glEnableVertexAttribArray(glGetAttribLocation(_program_id, "t_delta"));
-                glVertexAttribPointer(glGetAttribLocation(_program_id, "t_delta"), 1, GL_FLOAT, GL_FALSE, 0, 0);
+                glEnableVertexAttribArray(glGetAttribLocation(_program_id, "delta_t"));
+                glVertexAttribPointer(glGetAttribLocation(_program_id, "delta_t"), 1, GL_FLOAT, GL_FALSE, 0, 0);
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertex_buffers_ids));
                 glBindVertexArray(0);
 
@@ -305,24 +305,24 @@ namespace chameleon {
                 _intercept_location = glGetUniformLocation(_program_id, "intercept");
             } else {
                 // copy the events to minimise the strain on the event pipeline
-                while (_accessing_t_deltas.test_and_set(std::memory_order_acquire)) {
+                while (_accessing_delta_ts.test_and_set(std::memory_order_acquire)) {
                 }
-                std::copy(_t_deltas.begin(), _t_deltas.end(), _duplicated_t_deltas.begin());
-                _accessing_t_deltas.clear(std::memory_order_release);
+                std::copy(_delta_ts.begin(), _delta_ts.end(), _duplicated_delta_ts.begin());
+                _accessing_delta_ts.clear(std::memory_order_release);
 
                 // send data to the GPU
                 glUseProgram(_program_id);
                 glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertex_buffers_ids));
                 glBufferData(
                     GL_ARRAY_BUFFER,
-                    _duplicated_t_deltas.size() * sizeof(decltype(_duplicated_t_deltas)::value_type),
+                    _duplicated_delta_ts.size() * sizeof(decltype(_duplicated_delta_ts)::value_type),
                     nullptr,
                     GL_DYNAMIC_DRAW);
                 glBufferSubData(
                     GL_ARRAY_BUFFER,
                     0,
-                    _duplicated_t_deltas.size() * sizeof(decltype(_duplicated_t_deltas)::value_type),
-                    _duplicated_t_deltas.data());
+                    _duplicated_delta_ts.size() * sizeof(decltype(_duplicated_delta_ts)::value_type),
+                    _duplicated_delta_ts.data());
 
                 // resize the rendering area
                 glUseProgram(_program_id);
@@ -351,23 +351,23 @@ namespace chameleon {
                 }
                 if (_automatic_calibration) {
                     auto previous_discards = _discards;
-                    auto sorted_t_deltas = std::vector<float>();
-                    sorted_t_deltas.reserve(_duplicated_t_deltas.size());
-                    for (auto t_delta : _duplicated_t_deltas) {
-                        if (std::isfinite(t_delta)) {
-                            sorted_t_deltas.push_back(t_delta);
+                    auto sorted_delta_ts = std::vector<float>();
+                    sorted_delta_ts.reserve(_duplicated_delta_ts.size());
+                    for (auto delta_t : _duplicated_delta_ts) {
+                        if (std::isfinite(delta_t)) {
+                            sorted_delta_ts.push_back(delta_t);
                         }
                     }
-                    if (!sorted_t_deltas.empty()) {
-                        std::sort(sorted_t_deltas.begin(), sorted_t_deltas.end());
-                        auto black_discard_candidate = sorted_t_deltas[static_cast<std::size_t>(
-                            static_cast<float>(sorted_t_deltas.size()) * (1.0 - _discard_ratio))];
-                        auto white_discard_candidate = sorted_t_deltas[static_cast<std::size_t>(
-                            static_cast<float>(sorted_t_deltas.size()) * _discard_ratio + 0.5)];
+                    if (!sorted_delta_ts.empty()) {
+                        std::sort(sorted_delta_ts.begin(), sorted_delta_ts.end());
+                        auto black_discard_candidate = sorted_delta_ts[static_cast<std::size_t>(
+                            static_cast<float>(sorted_delta_ts.size()) * (1.0 - _discard_ratio))];
+                        auto white_discard_candidate = sorted_delta_ts[static_cast<std::size_t>(
+                            static_cast<float>(sorted_delta_ts.size()) * _discard_ratio + 0.5)];
 
                         if (black_discard_candidate <= white_discard_candidate) {
-                            black_discard_candidate = sorted_t_deltas.back();
-                            white_discard_candidate = sorted_t_deltas.front();
+                            black_discard_candidate = sorted_delta_ts.back();
+                            white_discard_candidate = sorted_delta_ts.front();
                             if (black_discard_candidate > white_discard_candidate) {
                                 _discards.setX(black_discard_candidate);
                                 _discards.setY(white_discard_candidate);
@@ -448,9 +448,9 @@ namespace chameleon {
         QColor _background_color;
         std::vector<GLuint> _indices;
         std::vector<float> _coordinates;
-        std::vector<float> _t_deltas;
-        std::vector<float> _duplicated_t_deltas;
-        std::atomic_flag _accessing_t_deltas;
+        std::vector<float> _delta_ts;
+        std::vector<float> _duplicated_delta_ts;
+        std::atomic_flag _accessing_delta_ts;
         QRectF _clear_area;
         QRectF _paint_area;
         QVector2D _discards;
@@ -465,8 +465,8 @@ namespace chameleon {
         GLuint _intercept_location;
     };
 
-    /// t_delta_display displays a stream of events.
-    class t_delta_display : public QQuickItem {
+    /// delta_t_display displays a stream of events.
+    class delta_t_display : public QQuickItem {
         Q_OBJECT
         Q_INTERFACES(QQmlParserStatus)
         Q_PROPERTY(QSize canvas_size READ canvas_size WRITE set_canvas_size)
@@ -480,21 +480,21 @@ namespace chameleon {
         /// colormap defines the colormap used by the display.
         enum colormap_t { Grey, Heat, Jet };
 
-        t_delta_display() :
+        delta_t_display() :
             _ready(false),
             _renderer_ready(false),
             _discards(QVector2D(0, 0)),
             _discard_ratio(0.01),
             _colormap(colormap_t::Grey),
             _background_color(Qt::black) {
-            connect(this, &QQuickItem::windowChanged, this, &t_delta_display::handle_window_changed);
+            connect(this, &QQuickItem::windowChanged, this, &delta_t_display::handle_window_changed);
             _accessing_renderer.clear(std::memory_order_release);
         }
-        t_delta_display(const t_delta_display&) = delete;
-        t_delta_display(t_delta_display&&) = default;
-        t_delta_display& operator=(const t_delta_display&) = delete;
-        t_delta_display& operator=(t_delta_display&&) = default;
-        virtual ~t_delta_display() {}
+        delta_t_display(const delta_t_display&) = delete;
+        delta_t_display(delta_t_display&&) = default;
+        delta_t_display& operator=(const delta_t_display&) = delete;
+        delta_t_display& operator=(delta_t_display&&) = default;
+        virtual ~delta_t_display() {}
 
         /// set_canvas_size defines the display coordinates.
         /// The canvas size will be passed to the openGL renderer, therefore it should only be set during qml
@@ -519,7 +519,7 @@ namespace chameleon {
             while (_accessing_renderer.test_and_set(std::memory_order_acquire)) {
             }
             if (_renderer_ready.load(std::memory_order_relaxed)) {
-                _t_delta_display_renderer->set_discards(discards);
+                _delta_t_display_renderer->set_discards(discards);
             } else {
                 _discards_to_load = discards;
             }
@@ -585,7 +585,7 @@ namespace chameleon {
         void push(Event event) {
             while (!_renderer_ready.load(std::memory_order_acquire)) {
             }
-            _t_delta_display_renderer->push<Event>(event);
+            _delta_t_display_renderer->push<Event>(event);
         }
 
         /// assign sets all the pixels at once.
@@ -593,7 +593,7 @@ namespace chameleon {
         void assign(Iterator begin, Iterator end) {
             while (!_renderer_ready.load(std::memory_order_acquire)) {
             }
-            _t_delta_display_renderer->assign<Iterator>(begin, end);
+            _delta_t_display_renderer->assign<Iterator>(begin, end);
         }
 
         /// componentComplete is called when all the qml values are bound.
@@ -617,23 +617,23 @@ namespace chameleon {
         /// sync adapts the renderer to external changes.
         void sync() {
             if (_ready.load(std::memory_order_relaxed)) {
-                if (!_t_delta_display_renderer) {
-                    _t_delta_display_renderer = std::unique_ptr<t_delta_display_renderer>(new t_delta_display_renderer(
+                if (!_delta_t_display_renderer) {
+                    _delta_t_display_renderer = std::unique_ptr<delta_t_display_renderer>(new delta_t_display_renderer(
                         _canvas_size, _discard_ratio, static_cast<std::size_t>(_colormap), _background_color));
                     connect(
                         window(),
                         &QQuickWindow::beforeRendering,
-                        _t_delta_display_renderer.get(),
-                        &t_delta_display_renderer::paint,
+                        _delta_t_display_renderer.get(),
+                        &delta_t_display_renderer::paint,
                         Qt::DirectConnection);
                     connect(
-                        _t_delta_display_renderer.get(),
-                        &t_delta_display_renderer::discards_changed,
+                        _delta_t_display_renderer.get(),
+                        &delta_t_display_renderer::discards_changed,
                         this,
-                        &t_delta_display::update_discards);
+                        &delta_t_display::update_discards);
                     while (_accessing_renderer.test_and_set(std::memory_order_acquire)) {
                     }
-                    _t_delta_display_renderer->set_discards(_discards_to_load);
+                    _delta_t_display_renderer->set_discards(_discards_to_load);
                     _renderer_ready.store(true, std::memory_order_release);
                     _accessing_renderer.clear(std::memory_order_release);
                 }
@@ -656,7 +656,7 @@ namespace chameleon {
                         _paint_area.moveLeft(clear_area.left());
                         _paint_area.moveTop(clear_area.top() + (clear_area.height() - _paint_area.height()) / 2);
                     }
-                    _t_delta_display_renderer->set_rendering_area(
+                    _delta_t_display_renderer->set_rendering_area(
                         _clear_area, _paint_area, window()->height() * window()->devicePixelRatio());
                     paintAreaChanged(_paint_area);
                 }
@@ -665,7 +665,7 @@ namespace chameleon {
 
         /// cleanup frees the owned renderer.
         void cleanup() {
-            _t_delta_display_renderer.reset();
+            _delta_t_display_renderer.reset();
         }
 
         /// trigger_draw requests a window refresh.
@@ -689,12 +689,12 @@ namespace chameleon {
         /// handle_window_changed must be triggered after a window transformation.
         void handle_window_changed(QQuickWindow* window) {
             if (window) {
-                connect(window, &QQuickWindow::beforeSynchronizing, this, &t_delta_display::sync, Qt::DirectConnection);
+                connect(window, &QQuickWindow::beforeSynchronizing, this, &delta_t_display::sync, Qt::DirectConnection);
                 connect(
                     window,
                     &QQuickWindow::sceneGraphInvalidated,
                     this,
-                    &t_delta_display::cleanup,
+                    &delta_t_display::cleanup,
                     Qt::DirectConnection);
                 window->setClearBeforeRendering(false);
             }
@@ -710,7 +710,7 @@ namespace chameleon {
         float _discard_ratio;
         colormap_t _colormap;
         QColor _background_color;
-        std::unique_ptr<t_delta_display_renderer> _t_delta_display_renderer;
+        std::unique_ptr<delta_t_display_renderer> _delta_t_display_renderer;
         QRectF _clear_area;
         QRectF _paint_area;
     };
