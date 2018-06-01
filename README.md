@@ -10,6 +10,7 @@ Within a Git repository, run the commands:
 mkdir -p third_party
 cd third_party
 git submodule add https://github.com/neuromorphic-paris/chameleon.git
+git submodule update --init --recursive
 ```
 
 # User guides and documentation
