@@ -465,27 +465,27 @@ namespace chameleon {
         GLuint _intercept_location;
     };
 
-    /// delta_t_display displays a stream of events.
+    /// delta_t_display displays a stream of exposure measurements encoded as time differences.
     class delta_t_display : public QQuickItem {
         Q_OBJECT
         Q_INTERFACES(QQmlParserStatus)
         Q_PROPERTY(QSize canvas_size READ canvas_size WRITE set_canvas_size)
         Q_PROPERTY(QVector2D discards READ discards WRITE set_discards NOTIFY discards_changed)
         Q_PROPERTY(float discard_ratio READ discard_ratio WRITE set_discard_ratio)
-        Q_PROPERTY(colormap_t colormap READ colormap WRITE set_colormap)
+        Q_PROPERTY(Colormap colormap READ colormap WRITE set_colormap)
         Q_PROPERTY(QColor background_color READ background_color WRITE set_background_color)
         Q_PROPERTY(QRectF paint_area READ paint_area)
-        Q_ENUMS(colormap_t)
+        Q_ENUMS(Colormap)
         public:
-        /// colormap defines the colormap used by the display.
-        enum colormap_t { Grey, Heat, Jet };
+        /// Colormap defines the colormap used by the display.
+        enum Colormap { Grey, Hot, Jet };
 
         delta_t_display() :
             _ready(false),
             _renderer_ready(false),
             _discards(QVector2D(0, 0)),
             _discard_ratio(0.01),
-            _colormap(colormap_t::Grey),
+            _colormap(Colormap::Grey),
             _background_color(Qt::black) {
             connect(this, &QQuickItem::windowChanged, this, &delta_t_display::handle_window_changed);
             _accessing_renderer.clear(std::memory_order_release);
@@ -548,7 +548,7 @@ namespace chameleon {
 
         /// set_colormap defines the colormap.
         /// The colormap will be passed to the openGL renderer, therefore it should only be set during qml construction.
-        virtual void set_colormap(colormap_t colormap) {
+        virtual void set_colormap(Colormap colormap) {
             if (_ready.load(std::memory_order_acquire)) {
                 throw std::logic_error("colormap can only be set during qml construction");
             }
@@ -556,7 +556,7 @@ namespace chameleon {
         }
 
         /// colormap returns the currently used colormap.
-        virtual colormap_t colormap() const {
+        virtual Colormap colormap() const {
             return _colormap;
         }
 
@@ -708,7 +708,7 @@ namespace chameleon {
         QVector2D _discards;
         QVector2D _discards_to_load;
         float _discard_ratio;
-        colormap_t _colormap;
+        Colormap _colormap;
         QColor _background_color;
         std::unique_ptr<delta_t_display_renderer> _delta_t_display_renderer;
         QRectF _clear_area;

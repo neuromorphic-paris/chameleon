@@ -62,14 +62,14 @@ namespace chameleon {
 
         public slots:
 
-        /// before_rendering_callback must be called when a rendering starts.
+        /// before_rendering_callback must be called when the window is about to be rendered.
         void before_rendering_callback() {
             if (!_rendering_not_required.test_and_set(std::memory_order_relaxed)) {
                 _before_rendering_done = true;
             }
         }
 
-        /// after_rendering_callback is called when a rendering ends.
+        /// after_rendering_callback must be called when the window completes a rendering.
         void after_rendering_callback() {
             if (!initializeOpenGLFunctions()) {
                 throw std::runtime_error("initializing the OpenGL context failed");

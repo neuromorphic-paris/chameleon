@@ -448,6 +448,14 @@ namespace chameleon {
             _flow_display_renderer->push<Event>(event);
         }
 
+        /// assign sets all the pixels at once.
+        template <typename Iterator>
+        void assign(Iterator begin, Iterator end) {
+            while (!_renderer_ready.load(std::memory_order_acquire)) {
+            }
+            _flow_display_renderer->assign<Iterator>(begin, end);
+        }
+
         /// componentComplete is called when all the qml values are bound.
         virtual void componentComplete() override {
             if (_canvas_size.width() <= 0 || _canvas_size.height() <= 0) {

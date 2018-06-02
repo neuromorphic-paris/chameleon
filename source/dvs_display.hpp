@@ -398,7 +398,7 @@ namespace chameleon {
         GLuint _current_t_location;
     };
 
-    /// dvs_display displays a stream of events.
+    /// dvs_display displays a stream of DVS events.
     class dvs_display : public QQuickItem {
         Q_OBJECT
         Q_INTERFACES(QQmlParserStatus)

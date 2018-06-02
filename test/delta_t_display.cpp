@@ -14,7 +14,7 @@ struct event {
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
-    qmlRegisterType<chameleon::delta_t_display>("Chameleon", 1, 0, "LogarithmicDisplay");
+    qmlRegisterType<chameleon::delta_t_display>("Chameleon", 1, 0, "DeltaTDisplay");
     QQmlApplicationEngine application_engine;
     application_engine.loadData(R""(
         import QtQuick 2.3
@@ -33,13 +33,13 @@ int main(int argc, char* argv[]) {
                     delta_t_display.trigger_draw();
                 }
             }
-            LogarithmicDisplay {
+            DeltaTDisplay {
                 id: delta_t_display
                 objectName: "delta_t_display"
                 canvas_size: "320x240"
                 width: window.width
                 height: window.height
-                colormap: LogarithmicDisplay.Heat
+                colormap: DeltaTDisplay.Hot
             }
         }
     )"");
