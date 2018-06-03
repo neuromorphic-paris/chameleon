@@ -1,4 +1,4 @@
-#include "../source/t_delta_display.hpp"
+#include "../source/delta_t_display.hpp"
 #include <QtGui/QGuiApplication>
 #include <QtQml/QQmlApplicationEngine>
 #include <atomic>
@@ -9,12 +9,12 @@
 struct event {
     uint16_t x;
     uint16_t y;
-    uint64_t t_delta;
+    uint64_t delta_t;
 } __attribute__((packed));
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
-    qmlRegisterType<chameleon::t_delta_display>("Chameleon", 1, 0, "LogarithmicDisplay");
+    qmlRegisterType<chameleon::delta_t_display>("Chameleon", 1, 0, "DeltaTDisplay");
     QQmlApplicationEngine application_engine;
     application_engine.loadData(R""(
         import QtQuick 2.3
@@ -30,16 +30,16 @@ int main(int argc, char* argv[]) {
                 running: true
                 repeat: true
                 onTriggered: {
-                    t_delta_display.trigger_draw();
+                    delta_t_display.trigger_draw();
                 }
             }
-            LogarithmicDisplay {
-                id: t_delta_display
-                objectName: "t_delta_display"
+            DeltaTDisplay {
+                id: delta_t_display
+                objectName: "delta_t_display"
                 canvas_size: "320x240"
                 width: window.width
                 height: window.height
-                colormap: LogarithmicDisplay.Heat
+                colormap: DeltaTDisplay.Hot
             }
         }
     )"");
@@ -52,18 +52,18 @@ int main(int argc, char* argv[]) {
         format.setProfile(QSurfaceFormat::CoreProfile);
         window->setFormat(format);
     }
-    auto t_delta_display = window->findChild<chameleon::t_delta_display*>("t_delta_display");
+    auto delta_t_display = window->findChild<chameleon::delta_t_display*>("delta_t_display");
     std::atomic_bool running(true);
     std::thread loop([&]() {
         std::random_device random_device;
         std::mt19937 engine(random_device());
-        std::uniform_int_distribution<uint64_t> t_delta_distribution;
+        std::uniform_int_distribution<uint64_t> delta_t_distribution;
         std::normal_distribution<double> distribution{200, 30};
         std::uint64_t t = 0;
         const auto time_reference = std::chrono::high_resolution_clock::now();
         while (running.load(std::memory_order_relaxed)) {
             for (std::size_t index = 0; index < 1000; ++index) {
-                t_delta_display->push(
+                delta_t_display->push(
                     event{static_cast<uint16_t>(
                               static_cast<uint64_t>(
                                   320.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
@@ -72,7 +72,7 @@ int main(int argc, char* argv[]) {
                               static_cast<uint64_t>(
                                   240.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
                               % 240),
-                          t_delta_distribution(engine)});
+                          delta_t_distribution(engine)});
                 t += 20;
             }
             std::this_thread::sleep_until(time_reference + std::chrono::microseconds(t));

@@ -88,7 +88,7 @@ namespace chameleon {
             while (_accessing_blobs.test_and_set(std::memory_order_acquire)) {
             }
             auto id_and_blob_and_took_place = _id_to_blob.insert(
-                {id, managed_blob{blob.x, blob.y, blob.squared_sigma_x, blob.sigma_xy, blob.squared_sigma_y}});
+                {id, managed_blob{blob.x, blob.y, blob.sigma_x_squared, blob.sigma_xy, blob.sigma_y_squared}});
             if (!id_and_blob_and_took_place.second) {
                 _accessing_blobs.clear(std::memory_order_release);
                 throw std::logic_error("the given blob id was already inserted");
@@ -108,9 +108,9 @@ namespace chameleon {
             }
             id_and_blob_candidate->second.x = blob.x;
             id_and_blob_candidate->second.y = blob.y;
-            id_and_blob_candidate->second.squared_sigma_x = blob.squared_sigma_x;
+            id_and_blob_candidate->second.sigma_x_squared = blob.sigma_x_squared;
             id_and_blob_candidate->second.sigma_xy = blob.sigma_xy;
-            id_and_blob_candidate->second.squared_sigma_y = blob.squared_sigma_y;
+            id_and_blob_candidate->second.sigma_y_squared = blob.sigma_y_squared;
             _accessing_blobs.clear(std::memory_order_release);
         }
 
@@ -157,9 +157,9 @@ namespace chameleon {
         struct managed_blob {
             float x;
             float y;
-            float squared_sigma_x;
+            float sigma_x_squared;
             float sigma_xy;
-            float squared_sigma_y;
+            float sigma_y_squared;
         };
 
         /// ellipse represents an ellipse's parameter.
@@ -173,16 +173,16 @@ namespace chameleon {
         static ellipse blob_to_ellipse(managed_blob blob, float confidence) {
             const auto delta_square_root =
                 std::sqrt(
-                    std::pow(blob.squared_sigma_x - blob.squared_sigma_y, 2.0f) + 4 * std::pow(blob.sigma_xy, 2.0f))
+                    std::pow(blob.sigma_x_squared - blob.sigma_y_squared, 2.0f) + 4 * std::pow(blob.sigma_xy, 2.0f))
                 / 2;
-            const auto first_order_coefficient = (blob.squared_sigma_x + blob.squared_sigma_y) / 2;
+            const auto first_order_coefficient = (blob.sigma_x_squared + blob.sigma_y_squared) / 2;
             return ellipse{
                 confidence * std::sqrt(first_order_coefficient + delta_square_root),
                 confidence * std::sqrt(first_order_coefficient - delta_square_root),
-                blob.squared_sigma_y == blob.squared_sigma_x ?
+                blob.sigma_y_squared == blob.sigma_x_squared ?
                     static_cast<float>(M_PI) / 4 :
-                    (std::atan(2 * blob.sigma_xy / (blob.squared_sigma_x - blob.squared_sigma_y))
-                     + (blob.squared_sigma_y > blob.squared_sigma_x ? static_cast<float>(M_PI) : 0.0f))
+                    (std::atan(2 * blob.sigma_xy / (blob.sigma_x_squared - blob.sigma_y_squared))
+                     + (blob.sigma_y_squared > blob.sigma_x_squared ? static_cast<float>(M_PI) : 0.0f))
                         / 2,
             };
         }
