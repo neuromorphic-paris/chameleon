@@ -6,7 +6,7 @@ local os_to_default_configuration = {
     },
     linux = {
         moc = '/usr/lib/x86_64-linux-gnu/qt5/bin/moc',
-        qml_includedirs = {
+        moc_includedirs = {
             '/usr/include/qt5/QtQml',
             '/usr/include/x86_64-linux-gnu/qt5/QtQml'},
         lib = '/usr/lib/x86_64-linux-gnu',
@@ -22,7 +22,7 @@ local os_to_default_configuration = {
     },
     macosx = {
         moc = '/usr/local/opt/qt/bin/moc',
-        qml_includedirs = {'/usr/local/opt/qt/include/QtQml'},
+        moc_includedirs = {'/usr/local/opt/qt/include/QtQml'},
         lib = '/usr/local/opt/qt/lib',
         includedirs = {
             '/usr/local/opt/qt/include',
@@ -65,15 +65,15 @@ function qt.moc(files, target_directory, os_to_configuration)
     local configuration = generate_configuration(os_to_configuration)
     os.mkdir(target_directory)
     local generated_files = {}
-    local qml_includes = {}
-    for index, includedir in ipairs(configuration.qml_includedirs) do
-        qml_includes[index] = '-I\'' .. includedir .. '\''
+    local moc_includes = {}
+    for index, includedir in ipairs(configuration.moc_includedirs) do
+        moc_includes[index] = '-I\'' .. includedir .. '\''
     end
     for index, file in pairs(files) do
         local target_file = target_directory .. '/' .. path.getname(file) .. '.cpp'
         if os.execute(
             configuration.moc
-            .. ' ' .. table.concat(qml_includes, ' ')
+            .. ' ' .. table.concat(moc_includes, ' ')
             .. ' -o \'' .. target_file .. '\''
             .. ' \''.. file .. '\''
         ) ~= 0 then
