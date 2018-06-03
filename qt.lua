@@ -9,7 +9,6 @@ local os_to_default_configuration = {
         moc_includedirs = {
             '/usr/include/qt5/QtQml',
             '/usr/include/x86_64-linux-gnu/qt5/QtQml'},
-        lib = '/usr/lib/x86_64-linux-gnu',
         includedirs = {
             '/usr/include/qt5/',
             '/usr/include/qt5/QtQml',
@@ -23,7 +22,6 @@ local os_to_default_configuration = {
     macosx = {
         moc = '/usr/local/opt/qt/bin/moc',
         moc_includedirs = {'/usr/local/opt/qt/include/QtQml'},
-        lib = '/usr/local/opt/qt/lib',
         includedirs = {
             '/usr/local/opt/qt/include',
             '/usr/local/opt/qt/include/QtQml'},
