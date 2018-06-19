@@ -17,11 +17,25 @@ git submodule update --init --recursive
 
 ## dependencies
 
-[Qt 5.x](https://www.qt.io) is required to host the components. Follow these steps to install it:
-- __Debian / Ubuntu__: Open a terminal and execute the command `sudo apt install qtbase5-dev qtdeclarative5-dev`.
-- __macOS__: Open a terminal and execute the command `brew install qt`.
-
 An application using Chameleon must link to several Qt libraries, as described in the file [qt.lua](blob/master/qt.lua). The page [use Qt in a premake project](https://github.com/neuromorphic-paris/chameleon/wiki/use-Qt-in-a-premake-project) provides documentation for this file.
+
+### Debian / Ubuntu
+
+Open a terminal and run:
+```sh
+sudo apt install qtbase5-dev qtdeclarative5-dev qml-module-qtquick-controls # GUI toolkit
+```
+
+### macOS
+
+Open a terminal and run:
+```sh
+brew install qt # GUI toolkit
+```
+If the command is not found, you need to install Homebrew first with the command:
+```sh
+ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+```
 
 # user guides and documentation
 
@@ -31,14 +45,21 @@ Code documentation is held in the [wiki](https://github.com/neuromorphic-paris/c
 
 ## development dependencies
 
-Chameleon relies on [Premake 4.x](https://github.com/premake/premake-4.x) (x ≥ 3) to generate build configurations. Follow these steps to install it:
-- __Debian / Ubuntu__: Open a terminal and execute the command `sudo apt-get install premake4`.
-- __macOS__: Open a terminal and execute the command `brew install premake`. If the command is not found, you need to install Homebrew first with the command<br />
-  `ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"`.
+### Debian / Ubuntu
 
-[ClangFormat](https://clang.llvm.org/docs/ClangFormat.html) is used to unify coding styles. Follow these steps to install it:
-- __Debian / Ubuntu__: Open a terminal and execute the command `sudo apt install clang-format`.
-- __macOS__: Open a terminal and execute the command `brew install clang-format`.
+Open a terminal and run:
+```sh
+sudo apt install premake4 # cross-platform build configuration
+sudo apt install clang-format # formatting tool
+```
+
+### macOS
+
+Open a terminal and run:
+```sh
+brew install premake # cross-platform build configuration
+brew install clang-format # formatting tool
+```
 
 ## test
 
