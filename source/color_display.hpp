@@ -419,8 +419,8 @@ namespace chameleon {
 
         signals:
 
-        /// paint_area_changed notifies a paint area change.
-        void paint_area_changed(QRectF paint_area);
+        /// paintAreaChanged notifies a paint area change.
+        void paintAreaChanged(QRectF paint_area);
 
         public slots:
 
@@ -459,7 +459,7 @@ namespace chameleon {
                     }
                     _color_display_renderer->set_rendering_area(
                         _clear_area, _paint_area, window()->height() * window()->devicePixelRatio());
-                    paint_area_changed(_paint_area);
+                    paintAreaChanged(_paint_area);
                 }
             }
         }
