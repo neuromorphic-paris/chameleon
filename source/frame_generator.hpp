@@ -19,7 +19,7 @@ namespace chameleon {
     class frame_generator_renderer : public QObject, public QOpenGLFunctions_3_3_Core {
         Q_OBJECT
         public:
-        frame_generator_renderer() : _program_setup(false), _before_rendering_done(false), _closing(false) {
+        frame_generator_renderer() : _before_rendering_done(false), _closing(false) {
             _rendering_not_required.clear(std::memory_order_release);
         }
         frame_generator_renderer(const frame_generator_renderer&) = delete;
@@ -74,33 +74,24 @@ namespace chameleon {
             if (!initializeOpenGLFunctions()) {
                 throw std::runtime_error("initializing the OpenGL context failed");
             }
-            if (!_program_setup) {
-                _program_setup = true;
-                _program_id = glCreateProgram();
-                glLinkProgram(_program_id);
-            } else {
-                if (_before_rendering_done) {
-                    _before_rendering_done = false;
-                    glUseProgram(_program_id);
-                    glEnable(GL_SCISSOR_TEST);
-                    {
-                        const std::lock_guard<std::mutex> lock(_pixels_mutex);
-                        _pixels.resize(_capture_area.width() * _capture_area.height() * 4);
-                        glReadPixels(
-                            static_cast<GLint>(_capture_area.left()),
-                            static_cast<GLint>(_capture_area.top()),
-                            static_cast<GLsizei>(_capture_area.width()),
-                            static_cast<GLsizei>(_capture_area.height()),
-                            GL_RGBA,
-                            GL_UNSIGNED_BYTE,
-                            _pixels.data());
-                        _image_width = _capture_area.width();
-                        _image_height = _capture_area.height();
-                    }
-                    _pixels_updated.notify_one();
-                    glDisable(GL_SCISSOR_TEST);
-                }
+            glEnable(GL_SCISSOR_TEST);
+            {
+                const std::lock_guard<std::mutex> lock(_pixels_mutex);
+                _pixels.resize(_capture_area.width() * _capture_area.height() * 4);
+                glReadPixels(
+                    static_cast<GLint>(_capture_area.left()),
+                    static_cast<GLint>(_capture_area.top()),
+                    static_cast<GLsizei>(_capture_area.width()),
+                    static_cast<GLsizei>(_capture_area.height()),
+                    GL_RGBA,
+                    GL_UNSIGNED_BYTE,
+                    _pixels.data());
+                _image_width = _capture_area.width();
+                _image_height = _capture_area.height();
             }
+            _pixels_updated.notify_one();
+            glDisable(GL_SCISSOR_TEST);
+            check_opengl_error();
         }
 
         /// closing is called when the window is about to be closed.
@@ -113,9 +104,24 @@ namespace chameleon {
         }
 
         protected:
+        /// check_opengl_error throws if openGL generated an error.
+        virtual void check_opengl_error() {
+            switch (glGetError()) {
+                case GL_NO_ERROR:
+                    break;
+                case GL_INVALID_ENUM:
+                    throw std::logic_error("OpenGL error: GL_INVALID_ENUM");
+                case GL_INVALID_VALUE:
+                    throw std::logic_error("OpenGL error: GL_INVALID_VALUE");
+                case GL_INVALID_OPERATION:
+                    throw std::logic_error("OpenGL error: GL_INVALID_OPERATION");
+                case GL_OUT_OF_MEMORY:
+                    throw std::logic_error("OpenGL error: GL_OUT_OF_MEMORY");
+            }
+        }
+
         QRectF _capture_area;
-        bool _program_setup;
-        GLuint _program_id;
+        // bool _program_setup;
         std::atomic_flag _rendering_not_required;
         bool _before_rendering_done;
         std::vector<unsigned char> _pixels;

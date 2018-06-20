@@ -23,7 +23,7 @@ An application using Chameleon must link to several Qt libraries, as described i
 
 Open a terminal and run:
 ```sh
-sudo apt install qtbase5-dev qtdeclarative5-dev qml-module-qtquick-controls # GUI toolkit
+sudo apt install qtbase5-dev qtdeclarative5-dev qml-module-qtquick-controls qml-module-qtquick-controls2 # GUI toolkit
 ```
 
 ### macOS

@@ -7,7 +7,7 @@ int main(int argc, char* argv[]) {
     qmlRegisterType<chameleon::background_cleaner>("Chameleon", 1, 0, "BackgroundCleaner");
     QQmlApplicationEngine application_engine;
     application_engine.loadData(R""(
-        import QtQuick 2.3
+        import QtQuick 2.7
         import QtQuick.Window 2.2
         import Chameleon 1.0
         Window {
