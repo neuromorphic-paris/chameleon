@@ -121,7 +121,7 @@ namespace chameleon {
         }
 
         QRectF _capture_area;
-        //bool _program_setup;
+        // bool _program_setup;
         std::atomic_flag _rendering_not_required;
         bool _before_rendering_done;
         std::vector<unsigned char> _pixels;
