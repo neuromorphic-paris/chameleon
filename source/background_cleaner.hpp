@@ -35,8 +35,6 @@ namespace chameleon {
             if (!initializeOpenGLFunctions()) {
                 throw std::runtime_error("initializing the OpenGL context failed");
             }
-
-            // resize the rendering area
             glEnable(GL_SCISSOR_TEST);
             glScissor(
                 static_cast<GLint>(_clear_area.left()),

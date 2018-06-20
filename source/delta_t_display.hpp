@@ -56,6 +56,7 @@ namespace chameleon {
         virtual ~delta_t_display_renderer() {
             glDeleteBuffers(2, _vertex_buffers_ids.data());
             glDeleteVertexArrays(1, &_vertex_array_id);
+            glDeleteProgram(_program_id);
         }
 
         /// set_rendering_area defines the rendering area.
@@ -396,12 +397,12 @@ namespace chameleon {
                 glDrawElements(GL_POINTS, static_cast<GLsizei>(_indices.size()), GL_UNSIGNED_INT, nullptr);
                 glBindVertexArray(0);
             }
-            check_open_g_l_error();
+            check_opengl_error();
         }
 
         protected:
-        /// check_open_g_l_error throws if openGL generated an error.
-        virtual void check_open_g_l_error() {
+        /// check_opengl_error throws if openGL generated an error.
+        virtual void check_opengl_error() {
             switch (glGetError()) {
                 case GL_NO_ERROR:
                     break;

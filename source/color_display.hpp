@@ -47,6 +47,7 @@ namespace chameleon {
         virtual ~color_display_renderer() {
             glDeleteBuffers(2, _vertex_buffers_ids.data());
             glDeleteVertexArrays(1, &_vertex_array_id);
+            glDeleteProgram(_program_id);
         }
 
         /// set_rendering_area defines the rendering area.
