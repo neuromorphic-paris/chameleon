@@ -12,7 +12,7 @@ struct event {
     float r;
     float g;
     float b;
-} __attribute__((packed));
+};
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);

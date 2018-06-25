@@ -13,7 +13,7 @@ struct blob {
     float sigma_x_squared;
     float sigma_xy;
     float sigma_y_squared;
-} __attribute__((packed));
+};
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);

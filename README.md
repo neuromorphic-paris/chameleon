@@ -39,11 +39,11 @@ ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/
 
 ### Windows
 
-Download and install [Qt](https://www.qt.io/download). Select the latest version when asked. You may want to restrict the installation to your platform, as the default setup will install pre-compiled versions for other platforms as well, and take up a lot of space. After the installation, open a command prompt as as administrator and run:
+Download and install [Qt](https://www.qt.io/download). Select the latest 32-bits version when asked. You may want to restrict the installation to your platform, as the default setup will install pre-compiled versions for other platforms as well, and take up a lot of space. After the installation, open a command prompt as administrator and run:
 ```batch
-mklink /D c:\Qt\opt c:\Qt\5.11.1\msvc2017_64
+mklink /D c:\Qt\opt c:\Qt\5.11.1\msvc2015
 ```
-You may need to change `5.1.11` and `msvc2017_64` to match your Qt version and platform.
+You may need to change `5.11.1` and `msvc2015` to match your Qt version and platform.
 
 # user guides and documentation
 

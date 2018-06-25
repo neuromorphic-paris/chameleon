@@ -11,7 +11,7 @@ struct event {
     uint16_t x;
     uint16_t y;
     bool is_increase;
-} __attribute__((packed));
+};
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);

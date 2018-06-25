@@ -485,7 +485,7 @@ namespace chameleon {
             _ready(false),
             _renderer_ready(false),
             _discards(QVector2D(0, 0)),
-            _discard_ratio(0.01),
+            _discard_ratio(0.01f),
             _colormap(Colormap::Grey),
             _background_color(Qt::black) {
             connect(this, &QQuickItem::windowChanged, this, &delta_t_display::handle_window_changed);
