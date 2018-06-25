@@ -40,7 +40,15 @@ local os_to_default_configuration = {
 
     },
     windows = {
-
+        moc = 'c:\\Qt\\opt\\bin\\moc.exe',
+        moc_includedirs = {'c:\\Qt\\opt\\include\\QtQml'},
+        includedirs = {
+            'c:\\Qt\\opt\\include',
+            'c:\\Qt\\opt\\include\\QtQml'},
+        libdirs = {'c:\\Qt\\opt\\lib'},
+        links = {'Qt5Core', 'Qt5Gui', 'Qt5Qml', 'Qt5Quick'},
+        buildoptions = {},
+        linkoptions = {},
     },
 }
 
