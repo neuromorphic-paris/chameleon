@@ -17,8 +17,6 @@ solution 'chameleon'
             language 'C++'
             location 'build'
             files {'source/' .. name .. '.hpp', 'test/' .. name .. '.cpp'}
-            buildoptions {'-std=c++11'}
-            linkoptions {'-std=c++11'}
             files(qt.moc({'source/' .. name .. '.hpp'}, 'build/moc'))
             for index, dependency_name in pairs(dependencies[name]) do
                 files(qt.moc({'source/' .. dependency_name .. '.hpp'}, 'build/moc'))
@@ -38,4 +36,11 @@ solution 'chameleon'
                 flags {'Symbols'}
             configuration 'linux'
                 links {'pthread'}
+                buildoptions {'-std=c++11'}
+                linkoptions {'-std=c++11'}
+            configuration 'macosx'
+                buildoptions {'-std=c++11'}
+                linkoptions {'-std=c++11'}
+            configuration 'windows'
+                files {'.clang-format'}
     end

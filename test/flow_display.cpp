@@ -13,7 +13,7 @@ struct event {
     uint16_t y;
     float vx;
     float vy;
-} __attribute__((packed));
+};
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
@@ -64,8 +64,8 @@ int main(int argc, char* argv[]) {
     std::thread loop([&]() {
         std::random_device random_device;
         std::mt19937 engine(random_device());
-        std::uniform_real_distribution<float> speed_distribution{0.0, 0.0002};
-        std::normal_distribution<double> distribution{200, 30};
+        std::uniform_real_distribution<float> speed_distribution{0.0f, 0.0002f};
+        std::normal_distribution<float> distribution{200, 30};
         std::uint64_t t = 0;
         const auto time_reference = std::chrono::high_resolution_clock::now();
         while (running.load(std::memory_order_relaxed)) {
@@ -74,11 +74,11 @@ int main(int argc, char* argv[]) {
                     t,
                     static_cast<uint16_t>(
                         static_cast<uint64_t>(
-                            320.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
+                            320.0 * (static_cast<float>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
                         % 320),
                     static_cast<uint16_t>(
                         static_cast<uint64_t>(
-                            240.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
+                            240.0 * (static_cast<float>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
                         % 240),
                     speed_distribution(engine),
                     speed_distribution(engine),

@@ -40,7 +40,15 @@ local os_to_default_configuration = {
 
     },
     windows = {
-
+        moc = 'c:\\Qt\\opt\\bin\\moc.exe',
+        moc_includedirs = {'c:\\Qt\\opt\\include\\QtQml'},
+        includedirs = {
+            'c:\\Qt\\opt\\include',
+            'c:\\Qt\\opt\\include\\QtQml'},
+        libdirs = {'c:\\Qt\\opt\\lib'},
+        links = {'Qt5Core', 'Qt5Gui', 'Qt5Qml', 'Qt5Quick'},
+        buildoptions = {},
+        linkoptions = {},
     },
 }
 
@@ -65,17 +73,17 @@ function qt.moc(files, target_directory, os_to_configuration)
     local generated_files = {}
     local moc_includes = {}
     for index, includedir in ipairs(configuration.moc_includedirs) do
-        moc_includes[index] = '-I\'' .. includedir .. '\''
+        moc_includes[index] = '-I"' .. includedir .. '"'
     end
     for index, file in pairs(files) do
         local target_file = target_directory .. '/' .. path.getname(file) .. '.cpp'
         if os.execute(
             configuration.moc
             .. ' ' .. table.concat(moc_includes, ' ')
-            .. ' -o \'' .. target_file .. '\''
-            .. ' \''.. file .. '\''
+            .. ' -o "' .. target_file .. '" '
+            .. ' "' .. path.translate(path.getabsolute(file)) .. '"'
         ) ~= 0 then
-            print('Qt error: running moc on ' .. file .. ' failed')
+            print('Qt error: running moc on "' .. path.translate(path.getabsolute(file)) .. '" failed')
             os.exit(1)
         end
         generated_files[index] = target_file
