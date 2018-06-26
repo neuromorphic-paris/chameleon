@@ -45,6 +45,8 @@ mklink /D c:\Qt\opt c:\Qt\5.11.1\msvc2015
 ```
 You may need to change `5.11.1` and `msvc2015` to match your Qt version and platform.
 
+Finally, add `c:\Qt\opt\bin` to your path and reboot your computer.
+
 # user guides and documentation
 
 Code documentation is held in the [wiki](https://github.com/neuromorphic-paris/chameleon/wiki).
