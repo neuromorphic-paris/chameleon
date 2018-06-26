@@ -8,7 +8,7 @@
 
 struct event {
     uint64_t delta_t;
-	uint16_t x;
+    uint16_t x;
     uint16_t y;
 };
 
@@ -63,18 +63,17 @@ int main(int argc, char* argv[]) {
         const auto time_reference = std::chrono::high_resolution_clock::now();
         while (running.load(std::memory_order_relaxed)) {
             for (std::size_t index = 0; index < 1000; ++index) {
-                delta_t_display->push(
-                    event{
-                        delta_t_distribution(engine),
-  					    static_cast<uint16_t>(
-                              static_cast<uint64_t>(
-                                  320.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
-                              % 320),
-                          static_cast<uint16_t>(
-                              static_cast<uint64_t>(
-                                  240.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
-                              % 240),
-                          });
+                delta_t_display->push(event{
+                    delta_t_distribution(engine),
+                    static_cast<uint16_t>(
+                        static_cast<uint64_t>(
+                            320.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
+                        % 320),
+                    static_cast<uint16_t>(
+                        static_cast<uint64_t>(
+                            240.0 * (static_cast<double>(t % 5000000) / 5000000.0) + distribution(engine) + 1)
+                        % 240),
+                });
                 t += 20;
             }
             std::this_thread::sleep_until(time_reference + std::chrono::microseconds(t));
