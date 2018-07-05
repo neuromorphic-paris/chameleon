@@ -1,6 +1,7 @@
 local qt = require 'qt'
 
 local dependencies = {
+    dvs_display = {'background_cleaner'},
     blob_display = {'background_cleaner'},
     flow_display = {'background_cleaner'},
     frame_generator = {'grey_display'},
