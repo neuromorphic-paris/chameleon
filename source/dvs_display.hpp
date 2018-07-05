@@ -62,9 +62,7 @@ namespace chameleon {
         }
 
         /// set_rendering_area defines the rendering area.
-        virtual void set_rendering_area(QRectF clear_area, QRectF paint_area, int window_height) {
-            _clear_area = clear_area;
-            _clear_area.moveTop(window_height - _clear_area.top() - _clear_area.height());
+        virtual void set_rendering_area(QRectF paint_area, int window_height) {
             _paint_area = paint_area;
             _paint_area.moveTop(window_height - _paint_area.top() - _paint_area.height());
         }
@@ -304,24 +302,13 @@ namespace chameleon {
                     _duplicated_ts_and_are_increases.data());
 
                 // resize the rendering area
-                glEnable(GL_SCISSOR_TEST);
-                glScissor(
-                    static_cast<GLint>(_clear_area.left()),
-                    static_cast<GLint>(_clear_area.top()),
-                    static_cast<GLsizei>(_clear_area.width()),
-                    static_cast<GLsizei>(_clear_area.height()));
-                glClearColor(
-                    static_cast<GLfloat>(_background_color.redF()),
-                    static_cast<GLfloat>(_background_color.greenF()),
-                    static_cast<GLfloat>(_background_color.blueF()),
-                    static_cast<GLfloat>(_background_color.alphaF()));
-                glClear(GL_COLOR_BUFFER_BIT);
-                glDisable(GL_SCISSOR_TEST);
                 glViewport(
                     static_cast<GLint>(_paint_area.left()),
                     static_cast<GLint>(_paint_area.top()),
                     static_cast<GLsizei>(_paint_area.width()),
                     static_cast<GLsizei>(_paint_area.height()));
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
                 // send varying data to the GPU
                 glUniform1f(_current_t_location, static_cast<GLfloat>(_duplicated_current_t));
@@ -390,7 +377,6 @@ namespace chameleon {
         std::vector<float> _ts_and_are_increases;
         std::vector<float> _duplicated_ts_and_are_increases;
         std::atomic_flag _accessing_ts_and_are_increases;
-        QRectF _clear_area;
         QRectF _paint_area;
         bool _program_setup;
         GLuint _program_id;
@@ -588,7 +574,7 @@ namespace chameleon {
                         _paint_area.moveTop(clear_area.top() + (clear_area.height() - _paint_area.height()) / 2);
                     }
                     _dvs_display_renderer->set_rendering_area(
-                        _clear_area, _paint_area, window()->height() * window()->devicePixelRatio());
+                        _paint_area, window()->height() * window()->devicePixelRatio());
                     paintAreaChanged(_paint_area);
                 }
             }

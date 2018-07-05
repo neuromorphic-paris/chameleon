@@ -1,4 +1,5 @@
 #include "../source/dvs_display.hpp"
+#include "../source/background_cleaner.hpp"
 #include <QtGui/QGuiApplication>
 #include <QtQml/QQmlApplicationEngine>
 #include <atomic>
@@ -15,6 +16,7 @@ struct event {
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
+    qmlRegisterType<chameleon::background_cleaner>("Chameleon", 1, 0, "BackgroundCleaner");
     qmlRegisterType<chameleon::dvs_display>("Chameleon", 1, 0, "ChangeDetectionDisplay");
     QQmlApplicationEngine application_engine;
     application_engine.loadData(R""(
@@ -34,12 +36,18 @@ int main(int argc, char* argv[]) {
                     dvs_display.trigger_draw();
                 }
             }
+            BackgroundCleaner {
+                width: window.width
+                height: window.height
+                color: "#888888"
+            }
             ChangeDetectionDisplay {
                 id: dvs_display
                 objectName: "dvs_display"
                 canvas_size: "320x240"
                 width: window.width
                 height: window.height
+                idle_color: "#00888888"
             }
         }
     )"");
