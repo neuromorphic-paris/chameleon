@@ -573,7 +573,8 @@ namespace chameleon {
                         _paint_area.moveLeft(clear_area.left());
                         _paint_area.moveTop(clear_area.top() + (clear_area.height() - _paint_area.height()) / 2);
                     }
-                    _dvs_display_renderer->set_rendering_area(_paint_area, window()->height() * window()->devicePixelRatio());
+                    _dvs_display_renderer->set_rendering_area(
+                        _paint_area, window()->height() * window()->devicePixelRatio());
                     paintAreaChanged(_paint_area);
                 }
             }
