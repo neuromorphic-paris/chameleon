@@ -316,7 +316,7 @@ namespace chameleon {
         virtual QSize canvas_size() const {
             return _canvas_size;
         }
-        
+
         /// paint_area returns the paint area in window coordinates.
         virtual QRectF paint_area() const {
             return _paint_area;
@@ -357,8 +357,8 @@ namespace chameleon {
         void sync() {
             if (_ready.load(std::memory_order_relaxed)) {
                 if (!_grey_display_renderer) {
-                    _grey_display_renderer = std::unique_ptr<grey_display_renderer>(
-                        new grey_display_renderer(_canvas_size));
+                    _grey_display_renderer =
+                        std::unique_ptr<grey_display_renderer>(new grey_display_renderer(_canvas_size));
                     connect(
                         window(),
                         &QQuickWindow::beforeRendering,

@@ -21,10 +21,7 @@ namespace chameleon {
     class delta_t_display_renderer : public QObject, public QOpenGLFunctions_3_3_Core {
         Q_OBJECT
         public:
-        delta_t_display_renderer(
-            QSize canvas_size,
-            float discard_ratio,
-            std::size_t colormap) :
+        delta_t_display_renderer(QSize canvas_size, float discard_ratio, std::size_t colormap) :
             _canvas_size(std::move(canvas_size)),
             _discard_ratio(discard_ratio),
             _colormap(colormap),

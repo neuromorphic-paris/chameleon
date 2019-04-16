@@ -265,7 +265,7 @@ namespace chameleon {
                 glUniform1f(glGetUniformLocation(_program_id, "decay"), static_cast<GLfloat>(_decay));
                 _current_t_location = glGetUniformLocation(_program_id, "current_t");
             }
-            
+
             // send data to the GPU
             std::vector<float> local_ts_and_flows(_ts_and_flows.size());
             while (_accessing_flows.test_and_set(std::memory_order_acquire)) {
