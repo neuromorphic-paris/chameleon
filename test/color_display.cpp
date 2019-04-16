@@ -1,4 +1,5 @@
 #include "../source/color_display.hpp"
+#include "../source/background_cleaner.hpp"
 #include <QtGui/QGuiApplication>
 #include <QtQml/QQmlApplicationEngine>
 #include <atomic>
@@ -16,6 +17,7 @@ struct event {
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
+    qmlRegisterType<chameleon::background_cleaner>("Chameleon", 1, 0, "BackgroundCleaner");
     qmlRegisterType<chameleon::color_display>("Chameleon", 1, 0, "ColorDisplay");
     QQmlApplicationEngine application_engine;
     application_engine.loadData(R""(
@@ -34,6 +36,10 @@ int main(int argc, char* argv[]) {
                 onTriggered: {
                     color_display.trigger_draw();
                 }
+            }
+            BackgroundCleaner {
+                width: window.width
+                height: window.height
             }
             ColorDisplay {
                 id: color_display

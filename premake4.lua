@@ -1,10 +1,13 @@
 local qt = require 'qt'
 
 local dependencies = {
-    dvs_display = {'background_cleaner'},
     blob_display = {'background_cleaner'},
+    color_display = {'background_cleaner'},
+    delta_t_display = {'background_cleaner'},
+    dvs_display = {'background_cleaner'},
     flow_display = {'background_cleaner'},
     frame_generator = {'grey_display'},
+    grey_display = {'background_cleaner'},
 }
 setmetatable(dependencies, {__index = function() return {} end})
 

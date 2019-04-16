@@ -1,4 +1,5 @@
 #include "../source/grey_display.hpp"
+#include "../source/background_cleaner.hpp"
 #include <QtGui/QGuiApplication>
 #include <QtQml/QQmlApplicationEngine>
 #include <atomic>
@@ -14,6 +15,7 @@ struct event {
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
+    qmlRegisterType<chameleon::background_cleaner>("Chameleon", 1, 0, "BackgroundCleaner");
     qmlRegisterType<chameleon::grey_display>("Chameleon", 1, 0, "GreyDisplay");
     QQmlApplicationEngine application_engine;
     application_engine.loadData(R""(
@@ -32,6 +34,10 @@ int main(int argc, char* argv[]) {
                 onTriggered: {
                     grey_display.trigger_draw();
                 }
+            }
+            BackgroundCleaner {
+                width: window.width
+                height: window.height
             }
             GreyDisplay {
                 id: grey_display

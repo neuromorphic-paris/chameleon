@@ -1,4 +1,5 @@
 #include "../source/delta_t_display.hpp"
+#include "../source/background_cleaner.hpp"
 #include <QtGui/QGuiApplication>
 #include <QtQml/QQmlApplicationEngine>
 #include <atomic>
@@ -7,13 +8,14 @@
 #include <thread>
 
 struct event {
-    uint64_t delta_t;
+    uint32_t delta_t;
     uint16_t x;
     uint16_t y;
 };
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
+    qmlRegisterType<chameleon::background_cleaner>("Chameleon", 1, 0, "BackgroundCleaner");
     qmlRegisterType<chameleon::delta_t_display>("Chameleon", 1, 0, "DeltaTDisplay");
     QQmlApplicationEngine application_engine;
     application_engine.loadData(R""(
@@ -32,6 +34,10 @@ int main(int argc, char* argv[]) {
                 onTriggered: {
                     delta_t_display.trigger_draw();
                 }
+            }
+            BackgroundCleaner {
+                width: window.width
+                height: window.height
             }
             DeltaTDisplay {
                 id: delta_t_display
@@ -57,7 +63,7 @@ int main(int argc, char* argv[]) {
     std::thread loop([&]() {
         std::random_device random_device;
         std::mt19937 engine(random_device());
-        std::uniform_int_distribution<uint64_t> delta_t_distribution;
+        std::uniform_int_distribution<uint32_t> delta_t_distribution;
         std::normal_distribution<double> distribution{200, 30};
         std::uint64_t t = 0;
         const auto time_reference = std::chrono::high_resolution_clock::now();
