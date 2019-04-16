@@ -32,22 +32,12 @@ namespace chameleon {
             _idle_color(idle_color),
             _decrease_color(decrease_color),
             _background_color(background_color),
+            _ts_and_are_increases(_canvas_size.width() * _canvas_size.height() * 2, 1.0f),
             _current_t(0),
-            _indices(_canvas_size.width() * _canvas_size.height()),
-            _duplicated_ts_and_are_increases(_canvas_size.width() * _canvas_size.height() * 2),
             _program_setup(false) {
-            for (auto index_iterator = _indices.begin(); index_iterator != _indices.end(); ++index_iterator) {
-                *index_iterator = static_cast<qint32>(std::distance(_indices.begin(), index_iterator));
-            }
-            _coordinates.reserve(_canvas_size.width() * _canvas_size.height() * 2);
-            _ts_and_are_increases.reserve(_canvas_size.width() * _canvas_size.height() * 2);
-            for (qint32 y = 0; y < _canvas_size.height(); ++y) {
-                for (qint32 x = 0; x < _canvas_size.width(); ++x) {
-                    _coordinates.push_back(static_cast<float>(x));
-                    _coordinates.push_back(static_cast<float>(y));
-                    _ts_and_are_increases.push_back(-std::numeric_limits<float>::infinity());
-                    _ts_and_are_increases.push_back(static_cast<float>(1.0));
-                }
+            for (auto iterator = _ts_and_are_increases.begin(); iterator != _ts_and_are_increases.end();
+                 std::advance(iterator, 2)) {
+                *iterator = -std::numeric_limits<float>::infinity();
             }
             _accessing_ts_and_are_increases.clear(std::memory_order_release);
         }
@@ -56,7 +46,9 @@ namespace chameleon {
         dvs_display_renderer& operator=(const dvs_display_renderer&) = delete;
         dvs_display_renderer& operator=(dvs_display_renderer&&) = default;
         virtual ~dvs_display_renderer() {
-            glDeleteBuffers(2, _vertex_buffers_ids.data());
+            glDeleteBuffers(1, &_pbo_id);
+            glDeleteTextures(1, &_texture_id);
+            glDeleteBuffers(static_cast<GLsizei>(_vertex_buffers_ids.size()), _vertex_buffers_ids.data());
             glDeleteVertexArrays(1, &_vertex_array_id);
             glDeleteProgram(_program_id);
         }
@@ -74,9 +66,9 @@ namespace chameleon {
                 (static_cast<std::size_t>(event.x) + static_cast<std::size_t>(event.y) * _canvas_size.width()) * 2;
             while (_accessing_ts_and_are_increases.test_and_set(std::memory_order_acquire)) {
             }
-            _current_t = event.t;
-            _ts_and_are_increases[index] = static_cast<float>(event.t);
-            _ts_and_are_increases[index + 1] = event.is_increase ? 1.0 : 0.0;
+            _ts_and_are_increases[index] = static_cast<uint32_t>(event.t);
+            _ts_and_are_increases[index + 1] = event.is_increase ? 1 : 0;
+            _current_t = static_cast<uint32_t>(event.t);
             _accessing_ts_and_are_increases.clear(std::memory_order_release);
         }
 
@@ -87,12 +79,13 @@ namespace chameleon {
             while (_accessing_ts_and_are_increases.test_and_set(std::memory_order_acquire)) {
             }
             for (; begin != end; ++begin) {
-                if (begin->t > _current_t) {
-                    _current_t = begin->t;
+                _ts_and_are_increases[index] = static_cast<uint32_t>(begin->t);
+                ++index;
+                _ts_and_are_increases[index] = begin->is_increase ? 1 : 0;
+                ++index;
+                if (static_cast<uint32_t>(begin->t) > _current_t) {
+                    _current_t = static_cast<uint32_t>(begin->t);
                 }
-                _ts_and_are_increases[index] = static_cast<float>(begin->t);
-                _ts_and_are_increases[index + 1] = begin->is_increase ? 1.0 : 0.0;
-                index += 2;
             }
             _accessing_ts_and_are_increases.clear(std::memory_order_release);
         }
@@ -113,25 +106,12 @@ namespace chameleon {
                     const std::string vertex_shader(R""(
                         #version 330 core
                         in vec2 coordinates;
-                        in vec2 t_and_is_increase;
-                        out vec4 geometry_color;
+                        out vec2 uv;
                         uniform float width;
                         uniform float height;
-                        uniform float decay;
-                        uniform float current_t;
-                        uniform vec4 increase_color;
-                        uniform vec4 idle_color;
-                        uniform vec4 decrease_color;
                         void main() {
-                            gl_Position =
-                                vec4(coordinates.x / width * 2.0 - 1.0, coordinates.y / height * 2.0 - 1.0, 0.0, 1.0);
-                            if (t_and_is_increase.x > current_t) {
-                                geometry_color = idle_color;
-                            } else {
-                                float lambda = exp(-(current_t - t_and_is_increase.x) / decay);
-                                geometry_color = lambda * (t_and_is_increase.y > 0.5 ? increase_color : decrease_color)
-                                                 + (1 - lambda) * idle_color;
-                            }
+                            gl_Position = vec4(coordinates, 0.0, 1.0);
+                            uv = vec2((coordinates.x + 1) / 2 * width, (coordinates.y + 1) / 2 * height);
                         }
                     )"");
                     auto vertex_shader_content = vertex_shader.c_str();
@@ -145,52 +125,23 @@ namespace chameleon {
                 glCompileShader(vertex_shader_id);
                 check_shader_error(vertex_shader_id);
 
-                // compile the geometry shader
-                const auto geometry_shader_id = glCreateShader(GL_GEOMETRY_SHADER);
-                {
-                    const std::string geometry_shader(R""(
-                        #version 330 core
-                        layout(points) in;
-                        layout(triangle_strip, max_vertices = 4) out;
-                        in vec4 geometry_color[];
-                        out vec4 fragment_color;
-                        uniform float width;
-                        uniform float height;
-                        void main() {
-                            fragment_color = geometry_color[0];
-                            float pixel_width = 2.0 / width;
-                            float pixel_height = 2.0 / height;
-                            gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y, 0.0, 1.0);
-                            EmitVertex();
-                            gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y + pixel_height, 0.0, 1.0);
-                            EmitVertex();
-                            gl_Position = vec4(gl_in[0].gl_Position.x + pixel_width, gl_in[0].gl_Position.y, 0.0, 1.0);
-                            EmitVertex();
-                            gl_Position = vec4(
-                                gl_in[0].gl_Position.x + pixel_width, gl_in[0].gl_Position.y + pixel_height, 0.0, 1.0);
-                            EmitVertex();
-                        }
-                    )"");
-                    auto geometry_shader_content = geometry_shader.c_str();
-                    auto geometry_shader_size = geometry_shader.size();
-                    glShaderSource(
-                        geometry_shader_id,
-                        1,
-                        static_cast<const GLchar**>(&geometry_shader_content),
-                        reinterpret_cast<const GLint*>(&geometry_shader_size));
-                }
-                glCompileShader(geometry_shader_id);
-                check_shader_error(geometry_shader_id);
-
                 // compile the fragment shader
                 const auto fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
                 {
                     const std::string fragment_shader(R""(
                         #version 330 core
-                        in vec4 fragment_color;
+                        in vec2 uv;
                         out vec4 color;
+                        uniform float decay;
+                        uniform uint current_t;
+                        uniform vec4 increase_color;
+                        uniform vec4 idle_color;
+                        uniform vec4 decrease_color;
+                        uniform usampler2DRect sampler;
                         void main() {
-                            color = fragment_color;
+                            uvec2 t_and_is_increase = texture(sampler, uv).xy;
+                            float lambda = exp(-float(current_t - t_and_is_increase.x) / decay);
+                            color = lambda * (t_and_is_increase.y == 1u ? increase_color : decrease_color) + (1.0 - lambda) * idle_color;
                         }
                     )"");
                     auto fragment_shader_content = fragment_shader.c_str();
@@ -207,48 +158,37 @@ namespace chameleon {
                 // create the shaders pipeline
                 _program_id = glCreateProgram();
                 glAttachShader(_program_id, vertex_shader_id);
-                glAttachShader(_program_id, geometry_shader_id);
                 glAttachShader(_program_id, fragment_shader_id);
                 glLinkProgram(_program_id);
                 glDeleteShader(vertex_shader_id);
-                glDeleteShader(geometry_shader_id);
                 glDeleteShader(fragment_shader_id);
                 glUseProgram(_program_id);
                 check_program_error(_program_id);
 
-                // create the vertex buffer objects
-                glGenBuffers(3, _vertex_buffers_ids.data());
-                glBindBuffer(GL_ARRAY_BUFFER, std::get<0>(_vertex_buffers_ids));
-                glBufferData(
-                    GL_ARRAY_BUFFER,
-                    _coordinates.size() * sizeof(decltype(_coordinates)::value_type),
-                    _coordinates.data(),
-                    GL_STATIC_DRAW);
-                glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertex_buffers_ids));
-                glBufferData(
-                    GL_ARRAY_BUFFER,
-                    _duplicated_ts_and_are_increases.size()
-                        * sizeof(decltype(_duplicated_ts_and_are_increases)::value_type),
-                    _duplicated_ts_and_are_increases.data(),
-                    GL_DYNAMIC_DRAW);
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertex_buffers_ids));
-                glBufferData(
-                    GL_ELEMENT_ARRAY_BUFFER,
-                    _indices.size() * sizeof(decltype(_indices)::value_type),
-                    _indices.data(),
-                    GL_STATIC_DRAW);
-
                 // create the vertex array object
                 glGenVertexArrays(1, &_vertex_array_id);
                 glBindVertexArray(_vertex_array_id);
-                glBindBuffer(GL_ARRAY_BUFFER, std::get<0>(_vertex_buffers_ids));
-                glEnableVertexAttribArray(glGetAttribLocation(_program_id, "coordinates"));
-                glVertexAttribPointer(glGetAttribLocation(_program_id, "coordinates"), 2, GL_FLOAT, GL_FALSE, 0, 0);
-                glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertex_buffers_ids));
-                glEnableVertexAttribArray(glGetAttribLocation(_program_id, "t_and_is_increase"));
-                glVertexAttribPointer(
-                    glGetAttribLocation(_program_id, "t_and_is_increase"), 2, GL_FLOAT, GL_FALSE, 0, 0);
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertex_buffers_ids));
+                glGenBuffers(static_cast<GLsizei>(_vertex_buffers_ids.size()), _vertex_buffers_ids.data());
+                {
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<0>(_vertex_buffers_ids));
+                    std::array<float, 8> coordinates{-1.0f, -1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 1.0f};
+                    glBufferData(
+                        GL_ARRAY_BUFFER,
+                        coordinates.size() * sizeof(decltype(coordinates)::value_type),
+                        coordinates.data(),
+                        GL_STATIC_DRAW);
+                    glEnableVertexAttribArray(glGetAttribLocation(_program_id, "coordinates"));
+                    glVertexAttribPointer(glGetAttribLocation(_program_id, "coordinates"), 2, GL_FLOAT, GL_FALSE, 0, 0);
+                }
+                {
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<1>(_vertex_buffers_ids));
+                    std::array<GLuint, 4> indices{0, 1, 2, 3};
+                    glBufferData(
+                        GL_ELEMENT_ARRAY_BUFFER,
+                        indices.size() * sizeof(decltype(indices)::value_type),
+                        indices.data(),
+                        GL_STATIC_DRAW);
+                }
                 glBindVertexArray(0);
 
                 // set the uniform values
@@ -274,48 +214,74 @@ namespace chameleon {
                     static_cast<GLfloat>(_decrease_color.blueF()),
                     static_cast<GLfloat>(_decrease_color.alphaF()));
                 _current_t_location = glGetUniformLocation(_program_id, "current_t");
-            } else {
-                // copy the events to minimise the strain on the event pipeline
-                while (_accessing_ts_and_are_increases.test_and_set(std::memory_order_acquire)) {
-                }
-                _duplicated_current_t = _current_t;
-                std::copy(
-                    _ts_and_are_increases.begin(),
-                    _ts_and_are_increases.end(),
-                    _duplicated_ts_and_are_increases.begin());
-                _accessing_ts_and_are_increases.clear(std::memory_order_release);
 
-                // send data to the GPU
-                glUseProgram(_program_id);
-                glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertex_buffers_ids));
+                // create the texture
+                glGenTextures(1, &_texture_id);
+                glBindTexture(GL_TEXTURE_RECTANGLE, _texture_id);
+                glTexImage2D(
+                    GL_TEXTURE_RECTANGLE,
+                    0,
+                    GL_RG32UI,
+                    _canvas_size.width(),
+                    _canvas_size.height(),
+                    0,
+                    GL_RG_INTEGER,
+                    GL_UNSIGNED_INT,
+                    nullptr);
+                glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+
+                // create the pbo
+                glGenBuffers(1, &_pbo_id);
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, _pbo_id);
                 glBufferData(
-                    GL_ARRAY_BUFFER,
-                    _duplicated_ts_and_are_increases.size()
-                        * sizeof(decltype(_duplicated_ts_and_are_increases)::value_type),
+                    GL_PIXEL_UNPACK_BUFFER,
+                    _ts_and_are_increases.size() * sizeof(decltype(_ts_and_are_increases)::value_type),
                     nullptr,
                     GL_DYNAMIC_DRAW);
-                glBufferSubData(
-                    GL_ARRAY_BUFFER,
-                    0,
-                    _duplicated_ts_and_are_increases.size()
-                        * sizeof(decltype(_duplicated_ts_and_are_increases)::value_type),
-                    _duplicated_ts_and_are_increases.data());
-
-                // resize the rendering area
-                glViewport(
-                    static_cast<GLint>(_paint_area.left()),
-                    static_cast<GLint>(_paint_area.top()),
-                    static_cast<GLsizei>(_paint_area.width()),
-                    static_cast<GLsizei>(_paint_area.height()));
-                glEnable(GL_BLEND);
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-                // send varying data to the GPU
-                glUniform1f(_current_t_location, static_cast<GLfloat>(_duplicated_current_t));
-                glBindVertexArray(_vertex_array_id);
-                glDrawElements(GL_POINTS, static_cast<GLsizei>(_indices.size()), GL_UNSIGNED_INT, nullptr);
-                glBindVertexArray(0);
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
             }
+
+            // send data to the GPU
+            glUseProgram(_program_id);
+            glViewport(
+                static_cast<GLint>(_paint_area.left()),
+                static_cast<GLint>(_paint_area.top()),
+                static_cast<GLsizei>(_paint_area.width()),
+                static_cast<GLsizei>(_paint_area.height()));
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glBindTexture(GL_TEXTURE_RECTANGLE, _texture_id);
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, _pbo_id);
+            glTexSubImage2D(
+                GL_TEXTURE_RECTANGLE,
+                0,
+                0,
+                0,
+                _canvas_size.width(),
+                _canvas_size.height(),
+                GL_RG_INTEGER,
+                GL_UNSIGNED_INT,
+                0);
+            {
+                auto buffer = reinterpret_cast<uint32_t*>(glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY));
+                if (!buffer) {
+                    throw std::logic_error("glMapBuffer returned an null pointer");
+                }
+                while (_accessing_ts_and_are_increases.test_and_set(std::memory_order_acquire)) {
+                }
+                glUniform1ui(_current_t_location, _current_t);
+                std::copy(_ts_and_are_increases.begin(), _ts_and_are_increases.end(), buffer);
+                _accessing_ts_and_are_increases.clear(std::memory_order_release);
+                glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+            }
+            glBindVertexArray(_vertex_array_id);
+            glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, 0);
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+            glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+            glBindVertexArray(0);
+            glUseProgram(0);
             check_opengl_error();
         }
 
@@ -354,7 +320,6 @@ namespace chameleon {
         virtual void check_program_error(GLuint program_id) {
             GLint status = 0;
             glGetProgramiv(program_id, GL_LINK_STATUS, &status);
-
             if (status != GL_TRUE) {
                 GLint message_length = 0;
                 glGetProgramiv(program_id, GL_INFO_LOG_LENGTH, &message_length);
@@ -370,18 +335,16 @@ namespace chameleon {
         QColor _idle_color;
         QColor _decrease_color;
         QColor _background_color;
-        float _current_t;
-        float _duplicated_current_t;
-        std::vector<GLuint> _indices;
-        std::vector<float> _coordinates;
-        std::vector<float> _ts_and_are_increases;
-        std::vector<float> _duplicated_ts_and_are_increases;
+        std::vector<uint32_t> _ts_and_are_increases;
+        uint32_t _current_t;
         std::atomic_flag _accessing_ts_and_are_increases;
         QRectF _paint_area;
         bool _program_setup;
         GLuint _program_id;
         GLuint _vertex_array_id;
-        std::array<GLuint, 3> _vertex_buffers_ids;
+        GLuint _texture_id;
+        GLuint _pbo_id;
+        std::array<GLuint, 2> _vertex_buffers_ids;
         GLuint _current_t_location;
     };
 

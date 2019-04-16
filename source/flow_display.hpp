@@ -25,7 +25,6 @@ namespace chameleon {
             _canvas_size(canvas_size),
             _speed_to_length(speed_to_length),
             _decay(decay),
-            _duplicated_ts_and_flows(_canvas_size.width() * _canvas_size.height() * 3),
             _program_setup(false) {
             _indices.reserve(_canvas_size.width() * _canvas_size.height());
             _coordinates.reserve(_canvas_size.width() * _canvas_size.height() * 2);
@@ -48,7 +47,7 @@ namespace chameleon {
         flow_display_renderer& operator=(const flow_display_renderer&) = delete;
         flow_display_renderer& operator=(flow_display_renderer&&) = default;
         virtual ~flow_display_renderer() {
-            glDeleteBuffers(2, _vertex_buffers_ids.data());
+            glDeleteBuffers(static_cast<GLsizei>(_vertex_buffers_ids.size()), _vertex_buffers_ids.data());
             glDeleteVertexArrays(1, &_vertex_array_id);
             glDeleteProgram(_program_id);
         }
@@ -227,8 +226,8 @@ namespace chameleon {
                 glUseProgram(_program_id);
                 check_program_error(_program_id);
 
-                // create the vertex buffer objects
-                glGenBuffers(3, _vertex_buffers_ids.data());
+                // create the vertex buffer and array objects
+                glGenBuffers(static_cast<GLsizei>(_vertex_buffers_ids.size()), _vertex_buffers_ids.data());
                 glBindBuffer(GL_ARRAY_BUFFER, std::get<0>(_vertex_buffers_ids));
                 glBufferData(
                     GL_ARRAY_BUFFER,
@@ -238,8 +237,8 @@ namespace chameleon {
                 glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertex_buffers_ids));
                 glBufferData(
                     GL_ARRAY_BUFFER,
-                    _duplicated_ts_and_flows.size() * sizeof(decltype(_duplicated_ts_and_flows)::value_type),
-                    _duplicated_ts_and_flows.data(),
+                    _ts_and_flows.size() * sizeof(decltype(_ts_and_flows)::value_type),
+                    nullptr,
                     GL_DYNAMIC_DRAW);
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertex_buffers_ids));
                 glBufferData(
@@ -247,11 +246,8 @@ namespace chameleon {
                     _indices.size() * sizeof(decltype(_indices)::value_type),
                     _indices.data(),
                     GL_STATIC_DRAW);
-
-                // create the vertex array object
                 glGenVertexArrays(1, &_vertex_array_id);
                 glBindVertexArray(_vertex_array_id);
-
                 glBindBuffer(GL_ARRAY_BUFFER, std::get<0>(_vertex_buffers_ids));
                 glEnableVertexAttribArray(glGetAttribLocation(_program_id, "coordinates"));
                 glVertexAttribPointer(glGetAttribLocation(_program_id, "coordinates"), 2, GL_FLOAT, GL_FALSE, 0, 0);
@@ -261,52 +257,47 @@ namespace chameleon {
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertex_buffers_ids));
                 glBindVertexArray(0);
 
-                // set the uniform values
+                // set uniform values
                 glUniform1f(glGetUniformLocation(_program_id, "width"), static_cast<GLfloat>(_canvas_size.width()));
                 glUniform1f(glGetUniformLocation(_program_id, "height"), static_cast<GLfloat>(_canvas_size.height()));
                 glUniform1f(
                     glGetUniformLocation(_program_id, "speed_to_length"), static_cast<GLfloat>(_speed_to_length));
                 glUniform1f(glGetUniformLocation(_program_id, "decay"), static_cast<GLfloat>(_decay));
                 _current_t_location = glGetUniformLocation(_program_id, "current_t");
-            } else {
-                // copy the events to minimise the strain on the event pipeline
-                while (_accessing_flows.test_and_set(std::memory_order_acquire)) {
-                }
-                _duplicated_current_t = _current_t;
-                std::copy(_ts_and_flows.begin(), _ts_and_flows.end(), _duplicated_ts_and_flows.begin());
-                _accessing_flows.clear(std::memory_order_release);
-
-                // send data to the GPU
-                glUseProgram(_program_id);
-                glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertex_buffers_ids));
-                glBufferData(
-                    GL_ARRAY_BUFFER,
-                    _duplicated_ts_and_flows.size() * sizeof(decltype(_duplicated_ts_and_flows)::value_type),
-                    nullptr,
-                    GL_DYNAMIC_DRAW);
-                glBufferSubData(
-                    GL_ARRAY_BUFFER,
-                    0,
-                    _duplicated_ts_and_flows.size() * sizeof(decltype(_duplicated_ts_and_flows)::value_type),
-                    _duplicated_ts_and_flows.data());
-
-                // resize the rendering area
-                glUseProgram(_program_id);
-                glViewport(
-                    static_cast<GLint>(_paint_area.left()),
-                    static_cast<GLint>(_paint_area.top()),
-                    static_cast<GLsizei>(_paint_area.width()),
-                    static_cast<GLsizei>(_paint_area.height()));
-                glDisable(GL_DEPTH_TEST);
-                glEnable(GL_BLEND);
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-                // send varying data to the GPU
-                glUniform1f(_current_t_location, static_cast<GLfloat>(_duplicated_current_t));
-                glBindVertexArray(_vertex_array_id);
-                glDrawElements(GL_POINTS, static_cast<GLsizei>(_indices.size()), GL_UNSIGNED_INT, nullptr);
-                glBindVertexArray(0);
             }
+
+            // send data to the GPU
+            std::vector<float> local_ts_and_flows(_ts_and_flows.size());
+            while (_accessing_flows.test_and_set(std::memory_order_acquire)) {
+            }
+            const auto local_current_t = _current_t;
+            std::copy(_ts_and_flows.begin(), _ts_and_flows.end(), local_ts_and_flows.begin());
+            _accessing_flows.clear(std::memory_order_release);
+            glUseProgram(_program_id);
+            glViewport(
+                static_cast<GLint>(_paint_area.left()),
+                static_cast<GLint>(_paint_area.top()),
+                static_cast<GLsizei>(_paint_area.width()),
+                static_cast<GLsizei>(_paint_area.height()));
+            glDisable(GL_DEPTH_TEST);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertex_buffers_ids));
+            glBufferData(
+                GL_ARRAY_BUFFER,
+                local_ts_and_flows.size() * sizeof(decltype(local_ts_and_flows)::value_type),
+                nullptr,
+                GL_DYNAMIC_DRAW);
+            glBufferSubData(
+                GL_ARRAY_BUFFER,
+                0,
+                local_ts_and_flows.size() * sizeof(decltype(local_ts_and_flows)::value_type),
+                local_ts_and_flows.data());
+            glUniform1f(_current_t_location, static_cast<GLfloat>(local_current_t));
+            glBindVertexArray(_vertex_array_id);
+            glDrawElements(GL_POINTS, static_cast<GLsizei>(_indices.size()), GL_UNSIGNED_INT, nullptr);
+            glBindVertexArray(0);
+            glUseProgram(0);
             check_opengl_error();
         }
 
@@ -359,11 +350,9 @@ namespace chameleon {
         float _speed_to_length;
         float _decay;
         float _current_t;
-        float _duplicated_current_t;
         std::vector<GLuint> _indices;
         std::vector<float> _coordinates;
         std::vector<float> _ts_and_flows;
-        std::vector<float> _duplicated_ts_and_flows;
         std::atomic_flag _accessing_flows;
         QRectF _paint_area;
         bool _program_setup;

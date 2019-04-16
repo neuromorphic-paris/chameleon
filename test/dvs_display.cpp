@@ -48,6 +48,7 @@ int main(int argc, char* argv[]) {
                 width: window.width
                 height: window.height
                 idle_color: "#00888888"
+                decay: 1e6
             }
         }
     )"");

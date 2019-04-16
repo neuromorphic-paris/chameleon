@@ -21,23 +21,10 @@ namespace chameleon {
     class grey_display_renderer : public QObject, public QOpenGLFunctions_3_3_Core {
         Q_OBJECT
         public:
-        grey_display_renderer(QSize canvas_size, QColor background_color) :
+        grey_display_renderer(QSize canvas_size) :
             _canvas_size(canvas_size),
-            _background_color(background_color),
-            _indices(_canvas_size.width() * _canvas_size.height()),
             _exposures(_canvas_size.width() * _canvas_size.height(), 0),
-            _duplicated_exposures(_canvas_size.width() * _canvas_size.height()),
             _program_setup(false) {
-            for (auto index_iterator = _indices.begin(); index_iterator != _indices.end(); ++index_iterator) {
-                *index_iterator = static_cast<qint32>(std::distance(_indices.begin(), index_iterator));
-            }
-            _coordinates.reserve(_canvas_size.width() * _canvas_size.height() * 2);
-            for (qint32 y = 0; y < _canvas_size.height(); ++y) {
-                for (qint32 x = 0; x < _canvas_size.width(); ++x) {
-                    _coordinates.push_back(static_cast<float>(x));
-                    _coordinates.push_back(static_cast<float>(y));
-                }
-            }
             _accessing_exposures.clear(std::memory_order_release);
         }
         grey_display_renderer(const grey_display_renderer&) = delete;
@@ -45,8 +32,11 @@ namespace chameleon {
         grey_display_renderer& operator=(const grey_display_renderer&) = delete;
         grey_display_renderer& operator=(grey_display_renderer&&) = default;
         virtual ~grey_display_renderer() {
-            glDeleteBuffers(2, _vertex_buffers_ids.data());
+            glDeleteBuffers(1, &_pbo_id);
+            glDeleteTextures(1, &_texture_id);
+            glDeleteBuffers(static_cast<GLsizei>(_vertex_buffers_ids.size()), _vertex_buffers_ids.data());
             glDeleteVertexArrays(1, &_vertex_array_id);
+            glDeleteProgram(_program_id);
         }
 
         /// set_rendering_area defines the rendering area.
@@ -93,14 +83,12 @@ namespace chameleon {
                     const std::string vertex_shader(R""(
                         #version 330 core
                         in vec2 coordinates;
-                        in float exposure;
-                        out vec4 geometry_color;
+                        out vec2 uv;
                         uniform float width;
                         uniform float height;
                         void main() {
-                            gl_Position =
-                                vec4(coordinates.x / width * 2.0 - 1.0, coordinates.y / height * 2.0 - 1.0, 0.0, 1.0);
-                            geometry_color = vec4(exposure, exposure, exposure, 1.0);
+                            gl_Position = vec4(coordinates, 0.0, 1.0);
+                            uv = vec2((coordinates.x + 1) / 2 * width, (coordinates.y + 1) / 2 * height);
                         }
                     )"");
                     auto vertex_shader_content = vertex_shader.c_str();
@@ -114,52 +102,16 @@ namespace chameleon {
                 glCompileShader(vertex_shader_id);
                 check_shader_error(vertex_shader_id);
 
-                // compile the geometry shader
-                const auto geometry_shader_id = glCreateShader(GL_GEOMETRY_SHADER);
-                {
-                    const std::string geometry_shader(R""(
-                        #version 330 core
-                        layout(points) in;
-                        layout(triangle_strip, max_vertices = 4) out;
-                        in vec4 geometry_color[];
-                        out vec4 fragment_color;
-                        uniform float width;
-                        uniform float height;
-                        void main() {
-                            fragment_color = geometry_color[0];
-                            float pixel_width = 2.0 / width;
-                            float pixel_height = 2.0 / height;
-                            gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y, 0.0, 1.0);
-                            EmitVertex();
-                            gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y + pixel_height, 0.0, 1.0);
-                            EmitVertex();
-                            gl_Position = vec4(gl_in[0].gl_Position.x + pixel_width, gl_in[0].gl_Position.y, 0.0, 1.0);
-                            EmitVertex();
-                            gl_Position = vec4(
-                                gl_in[0].gl_Position.x + pixel_width, gl_in[0].gl_Position.y + pixel_height, 0.0, 1.0);
-                            EmitVertex();
-                        }
-                    )"");
-                    auto geometry_shader_content = geometry_shader.c_str();
-                    auto geometry_shader_size = geometry_shader.size();
-                    glShaderSource(
-                        geometry_shader_id,
-                        1,
-                        static_cast<const GLchar**>(&geometry_shader_content),
-                        reinterpret_cast<const GLint*>(&geometry_shader_size));
-                }
-                glCompileShader(geometry_shader_id);
-                check_shader_error(geometry_shader_id);
-
                 // compile the fragment shader
                 const auto fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
                 {
                     const std::string fragment_shader(R""(
                         #version 330 core
-                        in vec4 fragment_color;
+                        in vec2 uv;
                         out vec4 color;
+                        uniform sampler2DRect sampler;
                         void main() {
-                            color = fragment_color;
+                            color = texture(sampler, uv).xxxw;
                         }
                     )"");
                     auto fragment_shader_content = fragment_shader.c_str();
@@ -176,98 +128,101 @@ namespace chameleon {
                 // create the shaders pipeline
                 _program_id = glCreateProgram();
                 glAttachShader(_program_id, vertex_shader_id);
-                glAttachShader(_program_id, geometry_shader_id);
                 glAttachShader(_program_id, fragment_shader_id);
                 glLinkProgram(_program_id);
                 glDeleteShader(vertex_shader_id);
-                glDeleteShader(geometry_shader_id);
                 glDeleteShader(fragment_shader_id);
                 glUseProgram(_program_id);
                 check_program_error(_program_id);
 
-                // create the vertex buffer objects
-                glGenBuffers(3, _vertex_buffers_ids.data());
-                glBindBuffer(GL_ARRAY_BUFFER, std::get<0>(_vertex_buffers_ids));
-                glBufferData(
-                    GL_ARRAY_BUFFER,
-                    _coordinates.size() * sizeof(decltype(_coordinates)::value_type),
-                    _coordinates.data(),
-                    GL_STATIC_DRAW);
-                glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertex_buffers_ids));
-                glBufferData(
-                    GL_ARRAY_BUFFER,
-                    _duplicated_exposures.size() * sizeof(decltype(_duplicated_exposures)::value_type),
-                    _duplicated_exposures.data(),
-                    GL_DYNAMIC_DRAW);
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertex_buffers_ids));
-                glBufferData(
-                    GL_ELEMENT_ARRAY_BUFFER,
-                    _indices.size() * sizeof(decltype(_indices)::value_type),
-                    _indices.data(),
-                    GL_STATIC_DRAW);
-
                 // create the vertex array object
                 glGenVertexArrays(1, &_vertex_array_id);
                 glBindVertexArray(_vertex_array_id);
-                glBindBuffer(GL_ARRAY_BUFFER, std::get<0>(_vertex_buffers_ids));
-                glEnableVertexAttribArray(glGetAttribLocation(_program_id, "coordinates"));
-                glVertexAttribPointer(glGetAttribLocation(_program_id, "coordinates"), 2, GL_FLOAT, GL_FALSE, 0, 0);
-                glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertex_buffers_ids));
-                glEnableVertexAttribArray(glGetAttribLocation(_program_id, "exposure"));
-                glVertexAttribPointer(glGetAttribLocation(_program_id, "exposure"), 1, GL_FLOAT, GL_FALSE, 0, 0);
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<2>(_vertex_buffers_ids));
+                glGenBuffers(static_cast<GLsizei>(_vertex_buffers_ids.size()), _vertex_buffers_ids.data());
+                {
+                    glBindBuffer(GL_ARRAY_BUFFER, std::get<0>(_vertex_buffers_ids));
+                    std::array<float, 8> coordinates{-1.0f, -1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 1.0f};
+                    glBufferData(
+                        GL_ARRAY_BUFFER,
+                        coordinates.size() * sizeof(decltype(coordinates)::value_type),
+                        coordinates.data(),
+                        GL_STATIC_DRAW);
+                    glEnableVertexAttribArray(glGetAttribLocation(_program_id, "coordinates"));
+                    glVertexAttribPointer(glGetAttribLocation(_program_id, "coordinates"), 2, GL_FLOAT, GL_FALSE, 0, 0);
+                }
+                {
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, std::get<1>(_vertex_buffers_ids));
+                    std::array<GLuint, 4> indices{0, 1, 2, 3};
+                    glBufferData(
+                        GL_ELEMENT_ARRAY_BUFFER,
+                        indices.size() * sizeof(decltype(indices)::value_type),
+                        indices.data(),
+                        GL_STATIC_DRAW);
+                }
                 glBindVertexArray(0);
 
                 // set the uniform values
                 glUniform1f(glGetUniformLocation(_program_id, "width"), static_cast<GLfloat>(_canvas_size.width()));
                 glUniform1f(glGetUniformLocation(_program_id, "height"), static_cast<GLfloat>(_canvas_size.height()));
-            } else {
-                // copy the events to minimise the strain on the event pipeline
-                while (_accessing_exposures.test_and_set(std::memory_order_acquire)) {
-                }
-                std::copy(_exposures.begin(), _exposures.end(), _duplicated_exposures.begin());
-                _accessing_exposures.clear(std::memory_order_release);
 
-                // send data to the GPU
-                glUseProgram(_program_id);
-                glBindBuffer(GL_ARRAY_BUFFER, std::get<1>(_vertex_buffers_ids));
+                // create the texture
+                glGenTextures(1, &_texture_id);
+                glBindTexture(GL_TEXTURE_RECTANGLE, _texture_id);
+                glTexImage2D(
+                    GL_TEXTURE_RECTANGLE,
+                    0,
+                    GL_RED,
+                    _canvas_size.width(),
+                    _canvas_size.height(),
+                    0,
+                    GL_RED,
+                    GL_FLOAT,
+                    nullptr);
+                glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+
+                // create the pbo
+                glGenBuffers(1, &_pbo_id);
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, _pbo_id);
                 glBufferData(
-                    GL_ARRAY_BUFFER,
-                    _duplicated_exposures.size() * sizeof(decltype(_duplicated_exposures)::value_type),
+                    GL_PIXEL_UNPACK_BUFFER,
+                    _exposures.size() * sizeof(decltype(_exposures)::value_type),
                     nullptr,
                     GL_DYNAMIC_DRAW);
-                glBufferSubData(
-                    GL_ARRAY_BUFFER,
-                    0,
-                    _duplicated_exposures.size() * sizeof(decltype(_duplicated_exposures)::value_type),
-                    _duplicated_exposures.data());
-
-                // resize the rendering area
-                glUseProgram(_program_id);
-                glEnable(GL_SCISSOR_TEST);
-                glScissor(
-                    static_cast<GLint>(_clear_area.left()),
-                    static_cast<GLint>(_clear_area.top()),
-                    static_cast<GLsizei>(_clear_area.width()),
-                    static_cast<GLsizei>(_clear_area.height()));
-                glClearColor(
-                    static_cast<GLfloat>(_background_color.redF()),
-                    static_cast<GLfloat>(_background_color.greenF()),
-                    static_cast<GLfloat>(_background_color.blueF()),
-                    static_cast<GLfloat>(_background_color.alphaF()));
-                glClear(GL_COLOR_BUFFER_BIT);
-                glDisable(GL_SCISSOR_TEST);
-                glViewport(
-                    static_cast<GLint>(_paint_area.left()),
-                    static_cast<GLint>(_paint_area.top()),
-                    static_cast<GLsizei>(_paint_area.width()),
-                    static_cast<GLsizei>(_paint_area.height()));
-
-                // send varying data to the GPU
-                glBindVertexArray(_vertex_array_id);
-                glDrawElements(GL_POINTS, static_cast<GLsizei>(_indices.size()), GL_UNSIGNED_INT, nullptr);
-                glBindVertexArray(0);
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
             }
+
+            // send data to the GPU
+            glUseProgram(_program_id);
+            glViewport(
+                static_cast<GLint>(_paint_area.left()),
+                static_cast<GLint>(_paint_area.top()),
+                static_cast<GLsizei>(_paint_area.width()),
+                static_cast<GLsizei>(_paint_area.height()));
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glBindTexture(GL_TEXTURE_RECTANGLE, _texture_id);
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, _pbo_id);
+            glTexSubImage2D(
+                GL_TEXTURE_RECTANGLE, 0, 0, 0, _canvas_size.width(), _canvas_size.height(), GL_RED, GL_FLOAT, 0);
+            {
+                auto buffer = reinterpret_cast<float*>(glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY));
+                if (!buffer) {
+                    throw std::logic_error("glMapBuffer returned an null pointer");
+                }
+                while (_accessing_exposures.test_and_set(std::memory_order_acquire)) {
+                }
+                std::copy(_exposures.begin(), _exposures.end(), buffer);
+                _accessing_exposures.clear(std::memory_order_release);
+                glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+            }
+            glBindVertexArray(_vertex_array_id);
+            glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, 0);
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+            glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+            glBindVertexArray(0);
+            glUseProgram(0);
             check_opengl_error();
         }
 
@@ -317,18 +272,16 @@ namespace chameleon {
         }
 
         QSize _canvas_size;
-        QColor _background_color;
-        std::vector<GLuint> _indices;
-        std::vector<float> _coordinates;
         std::vector<float> _exposures;
-        std::vector<float> _duplicated_exposures;
         std::atomic_flag _accessing_exposures;
         QRectF _clear_area;
         QRectF _paint_area;
         bool _program_setup;
         GLuint _program_id;
         GLuint _vertex_array_id;
-        std::array<GLuint, 3> _vertex_buffers_ids;
+        GLuint _texture_id;
+        GLuint _pbo_id;
+        std::array<GLuint, 2> _vertex_buffers_ids;
     };
 
     /// grey_display displays a stream of events without tone-mapping.
@@ -336,10 +289,9 @@ namespace chameleon {
         Q_OBJECT
         Q_INTERFACES(QQmlParserStatus)
         Q_PROPERTY(QSize canvas_size READ canvas_size WRITE set_canvas_size)
-        Q_PROPERTY(QColor background_color READ background_color WRITE set_background_color)
         Q_PROPERTY(QRectF paint_area READ paint_area)
         public:
-        grey_display() : _ready(false), _renderer_ready(false), _background_color(Qt::black) {
+        grey_display() : _ready(false), _renderer_ready(false) {
             connect(this, &QQuickItem::windowChanged, this, &grey_display::handle_window_changed);
         }
         grey_display(const grey_display&) = delete;
@@ -363,21 +315,6 @@ namespace chameleon {
         /// canvas_size returns the currently used canvas_size.
         virtual QSize canvas_size() const {
             return _canvas_size;
-        }
-
-        /// set_background_color defines the background color used to compensate the parent's shape.
-        /// The background color will be passed to the openGL renderer, therefore it should only be set during qml
-        /// construction.
-        virtual void set_background_color(QColor background_color) {
-            if (_ready.load(std::memory_order_acquire)) {
-                throw std::logic_error("background_color can only be set during qml construction");
-            }
-            _background_color = background_color;
-        }
-
-        /// background_color returns the currently used background_color.
-        virtual QColor background_color() const {
-            return _background_color;
         }
 
         /// paint_area returns the paint area in window coordinates.
@@ -420,8 +357,8 @@ namespace chameleon {
         void sync() {
             if (_ready.load(std::memory_order_relaxed)) {
                 if (!_grey_display_renderer) {
-                    _grey_display_renderer = std::unique_ptr<grey_display_renderer>(
-                        new grey_display_renderer(_canvas_size, _background_color));
+                    _grey_display_renderer =
+                        std::unique_ptr<grey_display_renderer>(new grey_display_renderer(_canvas_size));
                     connect(
                         window(),
                         &QQuickWindow::beforeRendering,
@@ -484,7 +421,6 @@ namespace chameleon {
         std::atomic_bool _ready;
         std::atomic_bool _renderer_ready;
         QSize _canvas_size;
-        QColor _background_color;
         std::unique_ptr<grey_display_renderer> _grey_display_renderer;
         QRectF _clear_area;
         QRectF _paint_area;
