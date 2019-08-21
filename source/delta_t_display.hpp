@@ -183,7 +183,7 @@ namespace chameleon {
                     }
                     fragment_shader.append(R""(
                         void main() {
-                            float exposure = clamp(slope * log(texture(sampler, uv).x) + intercept, 0.0, 1.0) * color_table_scale;
+                            float exposure = clamp(slope * log(float(texture(sampler, uv).x)) + intercept, 0.0, 1.0) * color_table_scale;
                             color = mix(
                                 color_table[int(exposure)],
                                 color_table[int(exposure) + 1],
