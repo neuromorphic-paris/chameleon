@@ -27,9 +27,9 @@ namespace chameleon {
             _accessing_blobs.clear(std::memory_order_release);
         }
         blob_display(const blob_display&) = delete;
-        blob_display(blob_display&&) = default;
+        blob_display(blob_display&&) = delete;
         blob_display& operator=(const blob_display&) = delete;
-        blob_display& operator=(blob_display&&) = default;
+        blob_display& operator=(blob_display&&) = delete;
         virtual ~blob_display() {}
 
         /// set_canvas_size defines the display coordinates.

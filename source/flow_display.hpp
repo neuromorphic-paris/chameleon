@@ -43,9 +43,9 @@ namespace chameleon {
             _accessing_flows.clear(std::memory_order_release);
         }
         flow_display_renderer(const flow_display_renderer&) = delete;
-        flow_display_renderer(flow_display_renderer&&) = default;
+        flow_display_renderer(flow_display_renderer&&) = delete;
         flow_display_renderer& operator=(const flow_display_renderer&) = delete;
-        flow_display_renderer& operator=(flow_display_renderer&&) = default;
+        flow_display_renderer& operator=(flow_display_renderer&&) = delete;
         virtual ~flow_display_renderer() {
             glDeleteBuffers(static_cast<GLsizei>(_vertex_buffers_ids.size()), _vertex_buffers_ids.data());
             glDeleteVertexArrays(1, &_vertex_array_id);
@@ -374,9 +374,9 @@ namespace chameleon {
             connect(this, &QQuickItem::windowChanged, this, &flow_display::handle_window_changed);
         }
         flow_display(const flow_display&) = delete;
-        flow_display(flow_display&&) = default;
+        flow_display(flow_display&&) = delete;
         flow_display& operator=(const flow_display&) = delete;
-        flow_display& operator=(flow_display&&) = default;
+        flow_display& operator=(flow_display&&) = delete;
         virtual ~flow_display() {}
 
         /// set_canvas_size defines the display coordinates.

@@ -23,9 +23,9 @@ namespace chameleon {
             _rendering_not_required.clear(std::memory_order_release);
         }
         frame_generator_renderer(const frame_generator_renderer&) = delete;
-        frame_generator_renderer(frame_generator_renderer&&) = default;
+        frame_generator_renderer(frame_generator_renderer&&) = delete;
         frame_generator_renderer& operator=(const frame_generator_renderer&) = delete;
-        frame_generator_renderer& operator=(frame_generator_renderer&&) = default;
+        frame_generator_renderer& operator=(frame_generator_renderer&&) = delete;
         virtual ~frame_generator_renderer() {}
 
         /// set_rendering_area defines the rendering area.
@@ -140,9 +140,9 @@ namespace chameleon {
             connect(this, &QQuickItem::windowChanged, this, &frame_generator::handle_window_changed);
         }
         frame_generator(const frame_generator&) = delete;
-        frame_generator(frame_generator&&) = default;
+        frame_generator(frame_generator&&) = delete;
         frame_generator& operator=(const frame_generator&) = delete;
-        frame_generator& operator=(frame_generator&&) = default;
+        frame_generator& operator=(frame_generator&&) = delete;
         virtual ~frame_generator() {}
 
         /// save_frame_to triggers a frame render and stores the resulting png image to the given file.
