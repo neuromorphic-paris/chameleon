@@ -33,9 +33,9 @@ namespace chameleon {
             _accessing_discards.clear(std::memory_order_release);
         }
         delta_t_display_renderer(const delta_t_display_renderer&) = delete;
-        delta_t_display_renderer(delta_t_display_renderer&&) = default;
+        delta_t_display_renderer(delta_t_display_renderer&&) = delete;
         delta_t_display_renderer& operator=(const delta_t_display_renderer&) = delete;
-        delta_t_display_renderer& operator=(delta_t_display_renderer&&) = default;
+        delta_t_display_renderer& operator=(delta_t_display_renderer&&) = delete;
         virtual ~delta_t_display_renderer() {
             glDeleteBuffers(1, &_pbo_id);
             glDeleteTextures(1, &_texture_id);
@@ -441,9 +441,9 @@ namespace chameleon {
             _accessing_renderer.clear(std::memory_order_release);
         }
         delta_t_display(const delta_t_display&) = delete;
-        delta_t_display(delta_t_display&&) = default;
+        delta_t_display(delta_t_display&&) = delete;
         delta_t_display& operator=(const delta_t_display&) = delete;
-        delta_t_display& operator=(delta_t_display&&) = default;
+        delta_t_display& operator=(delta_t_display&&) = delete;
         virtual ~delta_t_display() {}
 
         /// set_canvas_size defines the display coordinates.

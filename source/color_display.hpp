@@ -28,9 +28,9 @@ namespace chameleon {
             _accessing_colors.clear(std::memory_order_release);
         }
         color_display_renderer(const color_display_renderer&) = delete;
-        color_display_renderer(color_display_renderer&&) = default;
+        color_display_renderer(color_display_renderer&&) = delete;
         color_display_renderer& operator=(const color_display_renderer&) = delete;
-        color_display_renderer& operator=(color_display_renderer&&) = default;
+        color_display_renderer& operator=(color_display_renderer&&) = delete;
         virtual ~color_display_renderer() {
             glDeleteBuffers(1, &_pbo_id);
             glDeleteTextures(1, &_texture_id);
@@ -303,9 +303,9 @@ namespace chameleon {
             connect(this, &QQuickItem::windowChanged, this, &color_display::handle_window_changed);
         }
         color_display(const color_display&) = delete;
-        color_display(color_display&&) = default;
+        color_display(color_display&&) = delete;
         color_display& operator=(const color_display&) = delete;
-        color_display& operator=(color_display&&) = default;
+        color_display& operator=(color_display&&) = delete;
         virtual ~color_display() {}
 
         /// set_canvas_size defines the display coordinates.

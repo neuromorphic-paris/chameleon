@@ -42,9 +42,9 @@ namespace chameleon {
             _accessing_ts_and_are_increases.clear(std::memory_order_release);
         }
         dvs_display_renderer(const dvs_display_renderer&) = delete;
-        dvs_display_renderer(dvs_display_renderer&&) = default;
+        dvs_display_renderer(dvs_display_renderer&&) = delete;
         dvs_display_renderer& operator=(const dvs_display_renderer&) = delete;
-        dvs_display_renderer& operator=(dvs_display_renderer&&) = default;
+        dvs_display_renderer& operator=(dvs_display_renderer&&) = delete;
         virtual ~dvs_display_renderer() {
             glDeleteBuffers(1, &_pbo_id);
             glDeleteTextures(1, &_texture_id);
@@ -371,9 +371,9 @@ namespace chameleon {
             connect(this, &QQuickItem::windowChanged, this, &dvs_display::handle_window_changed);
         }
         dvs_display(const dvs_display&) = delete;
-        dvs_display(dvs_display&&) = default;
+        dvs_display(dvs_display&&) = delete;
         dvs_display& operator=(const dvs_display&) = delete;
-        dvs_display& operator=(dvs_display&&) = default;
+        dvs_display& operator=(dvs_display&&) = delete;
         virtual ~dvs_display() {}
 
         /// set_canvas_size defines the display coordinates.

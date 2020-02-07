@@ -17,9 +17,9 @@ namespace chameleon {
         public:
         background_cleaner_renderer(QColor color) : _color(color) {}
         background_cleaner_renderer(const background_cleaner_renderer&) = delete;
-        background_cleaner_renderer(background_cleaner_renderer&&) = default;
+        background_cleaner_renderer(background_cleaner_renderer&&) = delete;
         background_cleaner_renderer& operator=(const background_cleaner_renderer&) = delete;
-        background_cleaner_renderer& operator=(background_cleaner_renderer&&) = default;
+        background_cleaner_renderer& operator=(background_cleaner_renderer&&) = delete;
         virtual ~background_cleaner_renderer() {}
 
         /// set_rendering_area defines the clear area.
@@ -82,9 +82,9 @@ namespace chameleon {
             connect(this, &QQuickItem::windowChanged, this, &background_cleaner::handle_window_changed);
         }
         background_cleaner(const background_cleaner&) = delete;
-        background_cleaner(background_cleaner&&) = default;
+        background_cleaner(background_cleaner&&) = delete;
         background_cleaner& operator=(const background_cleaner&) = delete;
-        background_cleaner& operator=(background_cleaner&&) = default;
+        background_cleaner& operator=(background_cleaner&&) = delete;
         virtual ~background_cleaner() {}
 
         /// set_color defines the clear color.

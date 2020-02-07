@@ -28,9 +28,9 @@ namespace chameleon {
             _accessing_exposures.clear(std::memory_order_release);
         }
         grey_display_renderer(const grey_display_renderer&) = delete;
-        grey_display_renderer(grey_display_renderer&&) = default;
+        grey_display_renderer(grey_display_renderer&&) = delete;
         grey_display_renderer& operator=(const grey_display_renderer&) = delete;
-        grey_display_renderer& operator=(grey_display_renderer&&) = default;
+        grey_display_renderer& operator=(grey_display_renderer&&) = delete;
         virtual ~grey_display_renderer() {
             glDeleteBuffers(1, &_pbo_id);
             glDeleteTextures(1, &_texture_id);
@@ -295,9 +295,9 @@ namespace chameleon {
             connect(this, &QQuickItem::windowChanged, this, &grey_display::handle_window_changed);
         }
         grey_display(const grey_display&) = delete;
-        grey_display(grey_display&&) = default;
+        grey_display(grey_display&&) = delete;
         grey_display& operator=(const grey_display&) = delete;
-        grey_display& operator=(grey_display&&) = default;
+        grey_display& operator=(grey_display&&) = delete;
         virtual ~grey_display() {}
 
         /// set_canvas_size defines the display coordinates.
