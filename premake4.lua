@@ -8,6 +8,7 @@ local dependencies = {
     flow_display = {'background_cleaner'},
     frame_generator = {'grey_display'},
     grey_display = {'background_cleaner'},
+    centroid_display = {'background_cleaner'},
     grid_display = {'background_cleaner'},
 }
 setmetatable(dependencies, {__index = function() return {} end})
