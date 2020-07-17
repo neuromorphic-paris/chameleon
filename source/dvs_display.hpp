@@ -9,7 +9,9 @@
 #include <atomic>
 #include <limits>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 /// chameleon provides Qt components for event stream display.
@@ -21,25 +23,84 @@ namespace chameleon {
         public:
         dvs_display_renderer(
             QSize canvas_size,
-            float decay,
-            QColor increase_color,
-            QColor idle_color,
-            QColor decrease_color,
+            float parameter,
+            std::size_t style,
+            const QVector<QColor>& on_colormap,
+            const QVector<QColor>& off_colormap,
             QColor background_color) :
             _canvas_size(canvas_size),
-            _decay(decay),
-            _increase_color(increase_color),
-            _idle_color(idle_color),
-            _decrease_color(decrease_color),
+            _parameter(parameter),
+            _style(style),
             _background_color(background_color),
-            _ts_and_are_increases(_canvas_size.width() * _canvas_size.height() * 2, 1.0f),
+            _ts_and_ons(_canvas_size.width() * _canvas_size.height() * 2),
             _current_t(0),
             _program_setup(false) {
-            for (auto iterator = _ts_and_are_increases.begin(); iterator != _ts_and_are_increases.end();
-                 std::advance(iterator, 2)) {
-                *iterator = -std::numeric_limits<float>::infinity();
+            std::stringstream fragment_shader_stream;
+            fragment_shader_stream << "#version 330 core\n"
+                                   << "in vec2 uv;\n"
+                                   << "out vec4 color;\n"
+                                   << "uniform float parameter;\n"
+                                   << "uniform uint current_t;\n"
+                                   << "uniform usampler2DRect sampler;\n"
+                                   << "const float on_color_table_scale = " << on_colormap.size() - 1 << ";\n"
+                                   << "const float off_color_table_scale = " << off_colormap.size() - 1 << ";\n";
+            const auto table_size = std::max(on_colormap.size(), off_colormap.size()) + 1;
+            fragment_shader_stream << "const vec4 on_color_table[" << table_size << "] = vec4[](\n";
+            auto add_color_to_stream = [&](QColor color) {
+                fragment_shader_stream << "    vec4(" << color.redF() << ", " << color.greenF() << ", " << color.blueF()
+                                       << ", " << color.alphaF() << ")";
+            };
+            for (const auto& color : on_colormap) {
+                add_color_to_stream(color);
+                fragment_shader_stream << ",\n";
             }
-            _accessing_ts_and_are_increases.clear(std::memory_order_release);
+            add_color_to_stream(on_colormap.back());
+            if (on_colormap.size() < off_colormap.size()) {
+                for (std::size_t index = 0; index < off_colormap.size() - on_colormap.size(); ++index) {
+                    fragment_shader_stream << ",\n";
+                    add_color_to_stream(on_colormap.back());
+                }
+            }
+            fragment_shader_stream << ");\n";
+            fragment_shader_stream << "const vec4 off_color_table[" << table_size << "] = vec4[](\n";
+            for (const auto& color : off_colormap) {
+                add_color_to_stream(color);
+                fragment_shader_stream << ",\n";
+            }
+            add_color_to_stream(on_colormap.back());
+            if (off_colormap.size() < on_colormap.size()) {
+                for (std::size_t index = 0; index < on_colormap.size() - off_colormap.size(); ++index) {
+                    fragment_shader_stream << ",\n";
+                    add_color_to_stream(off_colormap.back());
+                }
+            }
+            fragment_shader_stream << ");\n";
+            fragment_shader_stream << "void main() {\n"
+                                   << "    uvec2 t_and_on = texture(sampler, uv).xy;\n";
+            switch (style) {
+                case 0:
+                    fragment_shader_stream
+                        << "    float lambda = 1.0f - exp(-float(current_t - t_and_on.x) / parameter);\n";
+                    break;
+                case 1:
+                    fragment_shader_stream << "    float lambda = (current_t - t_and_on.x) < parameter ? (current_t - t_and_on.x) / parameter : 1.0f;\n";
+                    break;
+                case 2:
+                    fragment_shader_stream << "    float lambda = (current_t - t_and_on.x) < parameter ? 0.0f : 1.0f;\n";
+                    break;
+                default:
+                    throw std::logic_error("unknown style");
+            }
+            fragment_shader_stream
+                << "    float scaled_lambda = lambda * (t_and_on.y == 1u ? on_color_table_scale : "
+                   "off_color_table_scale);\n"
+                << "    color = t_and_on.x == 0u ? on_color_table[int(on_color_table_scale)] : mix(\n"
+                << "        (t_and_on.y == 1u ? on_color_table : off_color_table)[int(scaled_lambda)],\n"
+                << "        (t_and_on.y == 1u ? on_color_table : off_color_table)[int(scaled_lambda) + 1],\n"
+                << "        scaled_lambda - float(int(scaled_lambda)));\n"
+                << "}\n";
+            _fragment_shader = fragment_shader_stream.str();
+            _accessing_ts_and_ons.clear(std::memory_order_release);
         }
         dvs_display_renderer(const dvs_display_renderer&) = delete;
         dvs_display_renderer(dvs_display_renderer&&) = delete;
@@ -59,35 +120,40 @@ namespace chameleon {
             _paint_area.moveTop(window_height - _paint_area.top() - _paint_area.height());
         }
 
+        /// set_parameter changes the exponential decay constant.
+        virtual void set_parameter(float parameter) {
+            _parameter.store(parameter, std::memory_order_relaxed);
+        }
+
         /// push adds an event to the display.
         template <typename Event>
         void push(Event event) {
             const auto index =
                 (static_cast<std::size_t>(event.x) + static_cast<std::size_t>(event.y) * _canvas_size.width()) * 2;
-            while (_accessing_ts_and_are_increases.test_and_set(std::memory_order_acquire)) {
+            while (_accessing_ts_and_ons.test_and_set(std::memory_order_acquire)) {
             }
-            _ts_and_are_increases[index] = static_cast<uint32_t>(event.t);
-            _ts_and_are_increases[index + 1] = event.is_increase ? 1 : 0;
+            _ts_and_ons[index] = static_cast<uint32_t>(event.t);
+            _ts_and_ons[index + 1] = event.on ? 1 : 0;
             _current_t = static_cast<uint32_t>(event.t);
-            _accessing_ts_and_are_increases.clear(std::memory_order_release);
+            _accessing_ts_and_ons.clear(std::memory_order_release);
         }
 
         /// assign sets all the pixels at once.
         template <typename Iterator>
         void assign(Iterator begin, Iterator end) {
             std::size_t index = 0;
-            while (_accessing_ts_and_are_increases.test_and_set(std::memory_order_acquire)) {
+            while (_accessing_ts_and_ons.test_and_set(std::memory_order_acquire)) {
             }
             for (; begin != end; ++begin) {
-                _ts_and_are_increases[index] = static_cast<uint32_t>(begin->t);
+                _ts_and_ons[index] = static_cast<uint32_t>(begin->t);
                 ++index;
-                _ts_and_are_increases[index] = begin->is_increase ? 1 : 0;
+                _ts_and_ons[index] = begin->on ? 1 : 0;
                 ++index;
                 if (static_cast<uint32_t>(begin->t) > _current_t) {
                     _current_t = static_cast<uint32_t>(begin->t);
                 }
             }
-            _accessing_ts_and_are_increases.clear(std::memory_order_release);
+            _accessing_ts_and_ons.clear(std::memory_order_release);
         }
 
         public slots:
@@ -128,24 +194,8 @@ namespace chameleon {
                 // compile the fragment shader
                 const auto fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
                 {
-                    const std::string fragment_shader(R""(
-                        #version 330 core
-                        in vec2 uv;
-                        out vec4 color;
-                        uniform float decay;
-                        uniform uint current_t;
-                        uniform vec4 increase_color;
-                        uniform vec4 idle_color;
-                        uniform vec4 decrease_color;
-                        uniform usampler2DRect sampler;
-                        void main() {
-                            uvec2 t_and_is_increase = texture(sampler, uv).xy;
-                            float lambda = exp(-float(current_t - t_and_is_increase.x) / decay);
-                            color = lambda * (t_and_is_increase.y == 1u ? increase_color : decrease_color) + (1.0 - lambda) * idle_color;
-                        }
-                    )"");
-                    auto fragment_shader_content = fragment_shader.c_str();
-                    auto fragment_shader_size = fragment_shader.size();
+                    auto fragment_shader_content = _fragment_shader.c_str();
+                    auto fragment_shader_size = _fragment_shader.size();
                     glShaderSource(
                         fragment_shader_id,
                         1,
@@ -194,25 +244,9 @@ namespace chameleon {
                 // set the uniform values
                 glUniform1f(glGetUniformLocation(_program_id, "width"), static_cast<GLfloat>(_canvas_size.width()));
                 glUniform1f(glGetUniformLocation(_program_id, "height"), static_cast<GLfloat>(_canvas_size.height()));
-                glUniform1f(glGetUniformLocation(_program_id, "decay"), static_cast<GLfloat>(_decay));
-                glUniform4f(
-                    glGetUniformLocation(_program_id, "increase_color"),
-                    static_cast<GLfloat>(_increase_color.redF()),
-                    static_cast<GLfloat>(_increase_color.greenF()),
-                    static_cast<GLfloat>(_increase_color.blueF()),
-                    static_cast<GLfloat>(_increase_color.alphaF()));
-                glUniform4f(
-                    glGetUniformLocation(_program_id, "idle_color"),
-                    static_cast<GLfloat>(_idle_color.redF()),
-                    static_cast<GLfloat>(_idle_color.greenF()),
-                    static_cast<GLfloat>(_idle_color.blueF()),
-                    static_cast<GLfloat>(_idle_color.alphaF()));
-                glUniform4f(
-                    glGetUniformLocation(_program_id, "decrease_color"),
-                    static_cast<GLfloat>(_decrease_color.redF()),
-                    static_cast<GLfloat>(_decrease_color.greenF()),
-                    static_cast<GLfloat>(_decrease_color.blueF()),
-                    static_cast<GLfloat>(_decrease_color.alphaF()));
+                glUniform1f(
+                    glGetUniformLocation(_program_id, "parameter"),
+                    static_cast<GLfloat>(_parameter.load(std::memory_order_relaxed)) * (_style == 1 ? 2.0f : 1.0f));
                 _current_t_location = glGetUniformLocation(_program_id, "current_t");
 
                 // create the texture
@@ -237,7 +271,7 @@ namespace chameleon {
                 glBindBuffer(GL_PIXEL_UNPACK_BUFFER, _pbo_id);
                 glBufferData(
                     GL_PIXEL_UNPACK_BUFFER,
-                    _ts_and_are_increases.size() * sizeof(decltype(_ts_and_are_increases)::value_type),
+                    _ts_and_ons.size() * sizeof(decltype(_ts_and_ons)::value_type),
                     nullptr,
                     GL_DYNAMIC_DRAW);
                 glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
@@ -269,11 +303,11 @@ namespace chameleon {
                 if (!buffer) {
                     throw std::logic_error("glMapBuffer returned an null pointer");
                 }
-                while (_accessing_ts_and_are_increases.test_and_set(std::memory_order_acquire)) {
+                while (_accessing_ts_and_ons.test_and_set(std::memory_order_acquire)) {
                 }
                 glUniform1ui(_current_t_location, _current_t);
-                std::copy(_ts_and_are_increases.begin(), _ts_and_are_increases.end(), buffer);
-                _accessing_ts_and_are_increases.clear(std::memory_order_release);
+                std::copy(_ts_and_ons.begin(), _ts_and_ons.end(), buffer);
+                _accessing_ts_and_ons.clear(std::memory_order_release);
                 glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
             }
             glBindVertexArray(_vertex_array_id);
@@ -330,14 +364,13 @@ namespace chameleon {
         }
 
         QSize _canvas_size;
-        float _decay;
-        QColor _increase_color;
-        QColor _idle_color;
-        QColor _decrease_color;
+        std::atomic<float> _parameter;
+        std::size_t _style;
         QColor _background_color;
-        std::vector<uint32_t> _ts_and_are_increases;
+        std::vector<uint32_t> _ts_and_ons;
         uint32_t _current_t;
-        std::atomic_flag _accessing_ts_and_are_increases;
+        std::string _fragment_shader;
+        std::atomic_flag _accessing_ts_and_ons;
         QRectF _paint_area;
         bool _program_setup;
         GLuint _program_id;
@@ -353,21 +386,27 @@ namespace chameleon {
         Q_OBJECT
         Q_INTERFACES(QQmlParserStatus)
         Q_PROPERTY(QSize canvas_size READ canvas_size WRITE set_canvas_size)
-        Q_PROPERTY(float decay READ decay WRITE set_decay)
-        Q_PROPERTY(QColor increase_color READ increase_color WRITE set_increase_color)
-        Q_PROPERTY(QColor idle_color READ idle_color WRITE set_idle_color)
-        Q_PROPERTY(QColor decrease_color READ decrease_color WRITE set_decrease_color)
+        Q_PROPERTY(float parameter READ parameter WRITE set_parameter)
+        Q_PROPERTY(Style style READ style WRITE set_style)
+        Q_PROPERTY(QVector<QColor> on_colormap READ on_colormap WRITE set_on_colormap)
+        Q_PROPERTY(QVector<QColor> off_colormap READ off_colormap WRITE set_off_colormap)
         Q_PROPERTY(QColor background_color READ background_color WRITE set_background_color)
         Q_PROPERTY(QRectF paint_area READ paint_area)
+        Q_ENUMS(Style)
+
+        Q_PROPERTY(QRectF paint_area READ paint_area)
         public:
+        /// Styles lists available decay functions.
+        enum Style { Exponential, Linear, Window };
+
         dvs_display() :
             _ready(false),
             _renderer_ready(false),
-            _decay(1e5),
-            _increase_color(Qt::white),
-            _idle_color(Qt::darkGray),
-            _decrease_color(Qt::black),
-            _background_color(Qt::black) {
+            _parameter(1e5),
+            _on_colormap({Qt::white, Qt::darkGray}),
+            _off_colormap({Qt::black, Qt::darkGray}),
+            _background_color(Qt::black),
+            _style(Style::Exponential) {
             connect(this, &QQuickItem::windowChanged, this, &dvs_display::handle_window_changed);
         }
         dvs_display(const dvs_display&) = delete;
@@ -377,8 +416,8 @@ namespace chameleon {
         virtual ~dvs_display() {}
 
         /// set_canvas_size defines the display coordinates.
-        /// The canvas size will be passed to the openGL renderer, therefore it should only be set during qml
-        /// construction.
+        /// The canvas size is used to generate OpenGL shaders.
+        /// It can only be set during qml initialization.
         virtual void set_canvas_size(QSize canvas_size) {
             if (_ready.load(std::memory_order_acquire)) {
                 throw std::logic_error("canvas_size can only be set during qml construction");
@@ -393,68 +432,73 @@ namespace chameleon {
             return _canvas_size;
         }
 
-        /// set_decay defines the pixel decay.
-        /// The decay will be passed to the openGL renderer, therefore it should only be set during qml construction.
-        virtual void set_decay(float decay) {
+        /// set_parameter defines the chosen style's time parameter.
+        virtual void set_parameter(float parameter) {
             if (_ready.load(std::memory_order_acquire)) {
-                throw std::logic_error("decay can only be set during qml construction");
+                _dvs_display_renderer->set_parameter(parameter);
             }
-            _decay = decay;
+            _parameter = parameter;
         }
 
-        /// decay returns the currently used decay.
-        virtual float decay() const {
-            return _decay;
+        /// parameter returns the currently used parameter.
+        virtual float parameter() const {
+            return _parameter;
         }
 
-        /// set_increase_color defines the color used to represent increasing light.
-        /// The increase color will be passed to the openGL renderer, therefore it should only be set during qml
-        /// construction.
-        virtual void set_increase_color(QColor increase_color) {
+        /// set_style defines the style.
+        /// The style is used to generate OpenGL shaders.
+        /// It can only be set during qml initialization.
+        virtual void set_style(Style style) {
             if (_ready.load(std::memory_order_acquire)) {
-                throw std::logic_error("increase_color can only be set during qml construction");
+                throw std::logic_error("style can only be set during qml initialization");
             }
-            _increase_color = increase_color;
+            _style = style;
         }
 
-        /// increase_color returns the currently used increase_color.
-        virtual QColor increase_color() const {
-            return _increase_color;
+        /// style returns the currently used style.
+        virtual Style style() const {
+            return _style;
         }
 
-        /// set_idle_color defines the color used to represent idle pixels.
-        /// The idle color will be passed to the openGL renderer, therefore it should only be set during qml
-        /// construction.
-        virtual void set_idle_color(QColor idle_color) {
+        /// set_on_colormap defines the colormap used to convert time deltas to colors for ON events.
+        /// The ON colormap is used to generate OpenGL shaders.
+        /// It can only be set during qml initialization.
+        virtual void set_on_colormap(const QVector<QColor>& on_colormap) {
+            if (on_colormap.size() < 2) {
+                throw std::logic_error("on_colormap must contain at least two elements");
+            }
             if (_ready.load(std::memory_order_acquire)) {
-                throw std::logic_error("idle_color can only be set during qml construction");
+                throw std::logic_error("on_colormap can only be set during qml construction");
             }
-            _idle_color = idle_color;
+            _on_colormap = on_colormap;
         }
 
-        /// idle_color returns the currently used idle_color.
-        virtual QColor idle_color() const {
-            return _idle_color;
+        /// on_colormap returns the currently used ON colormap.
+        virtual QVector<QColor> on_colormap() const {
+            return _on_colormap;
         }
 
-        /// set_decrease_color defines the color used to represent decreasing light.
-        /// The decrease color will be passed to the openGL renderer, therefore it should only be set during qml
-        /// construction.
-        virtual void set_decrease_color(QColor decrease_color) {
+        /// set_off_colormap defines the colormap used to convert time deltas to colors for OFF events.
+        /// The OFF colormap is used to generate OpenGL shaders.
+        /// It can only be set during qml initialization.
+        virtual void set_off_colormap(const QVector<QColor>& off_colormap) {
+            if (off_colormap.size() < 2) {
+                throw std::logic_error("off_colormap must contain at least two elements");
+            }
             if (_ready.load(std::memory_order_acquire)) {
-                throw std::logic_error("decrease_color can only be set during qml construction");
+                throw std::logic_error("off_colormap can only be set during qml construction");
             }
-            _decrease_color = decrease_color;
+            _off_colormap = off_colormap;
         }
 
-        /// decrease_color returns the currently used decrease_color.
-        virtual QColor decrease_color() const {
-            return _decrease_color;
+        /// off_colormap returns the currently used OFF colormap.
+        virtual QVector<QColor> off_colormap() const {
+            return _off_colormap;
         }
 
         /// set_background_color defines the background color used to compensate the parent's shape.
-        /// The background color will be passed to the openGL renderer, therefore it should only be set during qml
-        /// construction.
+        /// The background color is used to generate OpenGL shaders.
+        /// It can only be set during qml initialization.
         virtual void set_background_color(QColor background_color) {
             if (_ready.load(std::memory_order_acquire)) {
                 throw std::logic_error("background_color can only be set during qml construction");
@@ -508,7 +552,12 @@ namespace chameleon {
             if (_ready.load(std::memory_order_relaxed)) {
                 if (!_dvs_display_renderer) {
                     _dvs_display_renderer = std::unique_ptr<dvs_display_renderer>(new dvs_display_renderer(
-                        _canvas_size, _decay, _increase_color, _idle_color, _decrease_color, _background_color));
+                        _canvas_size,
+                        _parameter,
+                        static_cast<std::size_t>(_style),
+                        _on_colormap,
+                        _off_colormap,
+                        _background_color));
                     connect(
                         window(),
                         &QQuickWindow::beforeRendering,
@@ -571,10 +620,10 @@ namespace chameleon {
         std::atomic_bool _ready;
         std::atomic_bool _renderer_ready;
         QSize _canvas_size;
-        float _decay;
-        QColor _increase_color;
-        QColor _idle_color;
-        QColor _decrease_color;
+        float _parameter;
+        Style _style;
+        QVector<QColor> _on_colormap;
+        QVector<QColor> _off_colormap;
         QColor _background_color;
         std::unique_ptr<dvs_display_renderer> _dvs_display_renderer;
         QRectF _clear_area;

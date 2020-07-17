@@ -22,10 +22,7 @@ namespace chameleon {
         Q_OBJECT
         public:
         flow_display_renderer(QSize canvas_size, float speed_to_length, float decay) :
-            _canvas_size(canvas_size),
-            _speed_to_length(speed_to_length),
-            _decay(decay),
-            _program_setup(false) {
+            _canvas_size(canvas_size), _speed_to_length(speed_to_length), _decay(decay), _program_setup(false) {
             _indices.reserve(_canvas_size.width() * _canvas_size.height());
             _coordinates.reserve(_canvas_size.width() * _canvas_size.height() * 2);
             _ts_and_flows.reserve(_canvas_size.width() * _canvas_size.height() * 3);

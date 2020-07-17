@@ -97,8 +97,7 @@ You can then run sequentially the executables located in the *release* directory
 
 After changing the code, format the source files by running from the *chameleon* directory:
 ```sh
-for file in source/*.hpp; do clang-format -i $file; done;
-for file in test/*.cpp; do clang-format -i $file; done;
+clang-format -i source/*.hpp test/*.cpp
 ```
 
 __Windows__ users must run *Edit* > *Advanced* > *Format Document* from the Visual Studio menu instead.

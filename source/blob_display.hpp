@@ -19,9 +19,7 @@ namespace chameleon {
         Q_PROPERTY(qreal confidence READ confidence WRITE set_confidence)
         public:
         blob_display(QQuickItem* parent = nullptr) :
-            QQuickPaintedItem(parent),
-            _brush(Qt::transparent, Qt::SolidPattern),
-            _confidence(1.96f) {
+            QQuickPaintedItem(parent), _brush(Qt::transparent, Qt::SolidPattern), _confidence(1.96f) {
             _pen.setColor(Qt::black);
             _pen.setWidthF(1);
             _accessing_blobs.clear(std::memory_order_release);
