@@ -393,8 +393,6 @@ namespace chameleon {
         Q_PROPERTY(QColor background_color READ background_color WRITE set_background_color)
         Q_PROPERTY(QRectF paint_area READ paint_area)
         Q_ENUMS(Style)
-
-        Q_PROPERTY(QRectF paint_area READ paint_area)
         public:
         /// Styles lists available decay functions.
         enum Style { Exponential, Linear, Window };
