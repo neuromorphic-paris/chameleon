@@ -7,6 +7,7 @@
 #include <QtQuick/qquickwindow.h>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <sstream>
