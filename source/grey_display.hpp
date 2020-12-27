@@ -355,7 +355,7 @@ namespace chameleon {
 
         /// sync adapts the renderer to external changes.
         void sync() {
-            if (_ready.load(std::memory_order_relaxed)) {
+            if (_ready.load(std::memory_order_acquire)) {
                 if (!_grey_display_renderer) {
                     _grey_display_renderer =
                         std::unique_ptr<grey_display_renderer>(new grey_display_renderer(_canvas_size));

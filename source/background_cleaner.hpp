@@ -110,7 +110,7 @@ namespace chameleon {
 
         /// sync adapts the renderer to external changes.
         void sync() {
-            if (_ready.load(std::memory_order_relaxed)) {
+            if (_ready.load(std::memory_order_acquire)) {
                 if (!_background_cleaner_renderer) {
                     _background_cleaner_renderer =
                         std::unique_ptr<background_cleaner_renderer>(new background_cleaner_renderer(_color));

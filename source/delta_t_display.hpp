@@ -551,7 +551,7 @@ namespace chameleon {
 
         /// sync adapts the renderer to external changes.
         void sync() {
-            if (_ready.load(std::memory_order_relaxed)) {
+            if (_ready.load(std::memory_order_acquire)) {
                 if (!_delta_t_display_renderer) {
                     _delta_t_display_renderer = std::unique_ptr<delta_t_display_renderer>(new delta_t_display_renderer(
                         _canvas_size, _discard_ratio, static_cast<std::size_t>(_colormap)));

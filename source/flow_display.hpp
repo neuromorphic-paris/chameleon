@@ -460,7 +460,7 @@ namespace chameleon {
 
         /// sync adapts the renderer to external changes.
         void sync() {
-            if (_ready.load(std::memory_order_relaxed)) {
+            if (_ready.load(std::memory_order_acquire)) {
                 if (!_flow_display_renderer) {
                     _flow_display_renderer = std::unique_ptr<flow_display_renderer>(
                         new flow_display_renderer(_canvas_size, _speed_to_length, _decay));

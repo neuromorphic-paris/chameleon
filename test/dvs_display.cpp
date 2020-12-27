@@ -34,9 +34,10 @@ int main(int argc, char* argv[]) {
                 "#ff800000",
                 "#ff000000",
             ]
-            property var parameter: 1e6
+            property var tau: 5e5
+            property var gamma: 1.0
             visible: true
-            width: 320 * 3 + 10 * 2
+            width: 320 * 4 + 10 * 3
             height: 240 * 2 + 10
             Timer {
                 interval: 20
@@ -49,17 +50,19 @@ int main(int argc, char* argv[]) {
                     dvs_display_3.trigger_draw();
                     dvs_display_4.trigger_draw();
                     dvs_display_5.trigger_draw();
+                    dvs_display_6.trigger_draw();
+                    dvs_display_7.trigger_draw();
                 }
             }
             BackgroundCleaner {
                 width: window.width
                 height: window.height
-                color: "#888888"
+                color: "#222222"
             }
             GridLayout {
                 width: window.width
                 height: window.height
-                columns: 3
+                columns: 4
                 columnSpacing: 10
                 rowSpacing: 10
                 DvsDisplay {
@@ -68,7 +71,8 @@ int main(int argc, char* argv[]) {
                     canvas_size: "320x240"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    parameter: window.parameter
+                    tau: window.tau
+                    gamma: window.gamma
                     style: DvsDisplay.Exponential
                 }
                 DvsDisplay {
@@ -77,7 +81,8 @@ int main(int argc, char* argv[]) {
                     canvas_size: "320x240"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    parameter: window.parameter
+                    tau: window.tau
+                    gamma: window.gamma
                     style: DvsDisplay.Linear
                 }
                 DvsDisplay {
@@ -86,7 +91,8 @@ int main(int argc, char* argv[]) {
                     canvas_size: "320x240"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    parameter: window.parameter
+                    tau: window.tau
+                    gamma: window.gamma
                     style: DvsDisplay.Window
                 }
                 DvsDisplay {
@@ -95,10 +101,9 @@ int main(int argc, char* argv[]) {
                     canvas_size: "320x240"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    parameter: window.parameter
-                    style: DvsDisplay.Exponential
-                    on_colormap: window.hot_colormap
-                    off_colormap: window.hot_colormap
+                    tau: window.tau
+                    gamma: window.gamma
+                    style: DvsDisplay.Cumulative
                 }
                 DvsDisplay {
                     id: dvs_display_4
@@ -106,8 +111,9 @@ int main(int argc, char* argv[]) {
                     canvas_size: "320x240"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    parameter: window.parameter
-                    style: DvsDisplay.Linear
+                    tau: window.tau
+                    gamma: window.gamma
+                    style: DvsDisplay.Exponential
                     on_colormap: window.hot_colormap
                     off_colormap: window.hot_colormap
                 }
@@ -117,8 +123,33 @@ int main(int argc, char* argv[]) {
                     canvas_size: "320x240"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    parameter: window.parameter
+                    tau: window.tau
+                    gamma: window.gamma
+                    style: DvsDisplay.Linear
+                    on_colormap: window.hot_colormap
+                    off_colormap: window.hot_colormap
+                }
+                DvsDisplay {
+                    id: dvs_display_6
+                    objectName: "dvs_display_6"
+                    canvas_size: "320x240"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    tau: window.tau
+                    gamma: window.gamma
                     style: DvsDisplay.Window
+                    on_colormap: window.hot_colormap
+                    off_colormap: window.hot_colormap
+                }
+                DvsDisplay {
+                    id: dvs_display_7
+                    objectName: "dvs_display_7"
+                    canvas_size: "320x240"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    tau: window.tau
+                    gamma: window.gamma
+                    style: DvsDisplay.Cumulative
                     on_colormap: window.hot_colormap
                     off_colormap: window.hot_colormap
                 }
@@ -135,13 +166,15 @@ int main(int argc, char* argv[]) {
         window->setFormat(format);
     }
     
-    std::array<chameleon::dvs_display*, 6> displays = {
+    std::array<chameleon::dvs_display*, 8> displays = {
         window->findChild<chameleon::dvs_display*>("dvs_display_0"),
         window->findChild<chameleon::dvs_display*>("dvs_display_1"),
         window->findChild<chameleon::dvs_display*>("dvs_display_2"),
         window->findChild<chameleon::dvs_display*>("dvs_display_3"),
         window->findChild<chameleon::dvs_display*>("dvs_display_4"),
         window->findChild<chameleon::dvs_display*>("dvs_display_5"),
+        window->findChild<chameleon::dvs_display*>("dvs_display_6"),
+        window->findChild<chameleon::dvs_display*>("dvs_display_7"),
     };
     std::atomic_bool running(true);
     std::thread loop([&]() {
