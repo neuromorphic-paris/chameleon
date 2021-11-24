@@ -37,7 +37,7 @@ namespace chameleon {
             _program_setup(false) {
             for (auto iterator = _ts_and_are_increases.begin(); iterator != _ts_and_are_increases.end();
                  std::advance(iterator, 2)) {
-                *iterator = -std::numeric_limits<float>::infinity();
+                *iterator = 0;
             }
             _accessing_ts_and_are_increases.clear(std::memory_order_release);
         }
