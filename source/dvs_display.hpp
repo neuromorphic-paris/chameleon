@@ -35,9 +35,9 @@ namespace chameleon {
             _ts_and_are_increases(_canvas_size.width() * _canvas_size.height() * 2, 1.0f),
             _current_t(0),
             _program_setup(false) {
-            for (auto iterator = _ts_and_are_increases.begin(); iterator != _ts_and_are_increases.end();
-                 std::advance(iterator, 2)) {
-                *iterator = -std::numeric_limits<float>::infinity();
+            for (size_t index = 0; index < _ts_and_are_increases.size(); index += 2) {
+                _ts_and_are_increases[index] = -2*_decay;
+                _ts_and_are_increases[index+1] = 0;
             }
             _accessing_ts_and_are_increases.clear(std::memory_order_release);
         }
@@ -66,7 +66,7 @@ namespace chameleon {
                 (static_cast<std::size_t>(event.x) + static_cast<std::size_t>(event.y) * _canvas_size.width()) * 2;
             while (_accessing_ts_and_are_increases.test_and_set(std::memory_order_acquire)) {
             }
-            _ts_and_are_increases[index] = static_cast<uint32_t>(event.t);
+            _ts_and_are_increases[index] = static_cast<int32_t>(event.t);
             _ts_and_are_increases[index + 1] = event.is_increase ? 1 : 0;
             _current_t = static_cast<uint32_t>(event.t);
             _accessing_ts_and_are_increases.clear(std::memory_order_release);
@@ -79,7 +79,7 @@ namespace chameleon {
             while (_accessing_ts_and_are_increases.test_and_set(std::memory_order_acquire)) {
             }
             for (; begin != end; ++begin) {
-                _ts_and_are_increases[index] = static_cast<uint32_t>(begin->t);
+                _ts_and_are_increases[index] = static_cast<int32_t>(begin->t);
                 ++index;
                 _ts_and_are_increases[index] = begin->is_increase ? 1 : 0;
                 ++index;
@@ -87,6 +87,18 @@ namespace chameleon {
                     _current_t = static_cast<uint32_t>(begin->t);
                 }
             }
+            _accessing_ts_and_are_increases.clear(std::memory_order_release);
+        }
+
+        /// reset pixels
+        void reset() {
+            while (_accessing_ts_and_are_increases.test_and_set(std::memory_order_acquire)) {
+            }
+            for (size_t index = 0; index < _ts_and_are_increases.size(); index += 2) {
+                _ts_and_are_increases[index] = -2*_decay;
+                _ts_and_are_increases[index+1] = 0;
+            }
+            _current_t = 0;
             _accessing_ts_and_are_increases.clear(std::memory_order_release);
         }
 
@@ -137,11 +149,12 @@ namespace chameleon {
                         uniform vec4 increase_color;
                         uniform vec4 idle_color;
                         uniform vec4 decrease_color;
-                        uniform usampler2DRect sampler;
+                        uniform isampler2DRect sampler;
                         void main() {
-                            uvec2 t_and_is_increase = texture(sampler, uv).xy;
+                            vec2 t_and_is_increase = texture(sampler, uv).xy;
                             float lambda = exp(-float(current_t - t_and_is_increase.x) / decay);
-                            color = lambda * (t_and_is_increase.y == 1u ? increase_color : decrease_color) + (1.0 - lambda) * idle_color;
+                            color = lambda * (t_and_is_increase.y == 1 ? increase_color : decrease_color) + (1.0 - lambda) * idle_color;
+                            color = current_t == 0u ? idle_color : color;  // this is to avoid drawing all events prior to the reset, as the update of current_t and texture are not synchronous
                         }
                     )"");
                     auto fragment_shader_content = fragment_shader.c_str();
@@ -221,12 +234,12 @@ namespace chameleon {
                 glTexImage2D(
                     GL_TEXTURE_RECTANGLE,
                     0,
-                    GL_RG32UI,
+                    GL_RG32I,
                     _canvas_size.width(),
                     _canvas_size.height(),
                     0,
                     GL_RG_INTEGER,
-                    GL_UNSIGNED_INT,
+                    GL_INT,
                     nullptr);
                 glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
                 glTexParameteri(GL_TEXTURE_RECTANGLE, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -262,10 +275,10 @@ namespace chameleon {
                 _canvas_size.width(),
                 _canvas_size.height(),
                 GL_RG_INTEGER,
-                GL_UNSIGNED_INT,
+                GL_INT,
                 0);
             {
-                auto buffer = reinterpret_cast<uint32_t*>(glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY));
+                auto buffer = reinterpret_cast<int32_t*>(glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY));
                 if (!buffer) {
                     throw std::logic_error("glMapBuffer returned an null pointer");
                 }
@@ -335,7 +348,7 @@ namespace chameleon {
         QColor _idle_color;
         QColor _decrease_color;
         QColor _background_color;
-        std::vector<uint32_t> _ts_and_are_increases;
+        std::vector<int32_t> _ts_and_are_increases;
         uint32_t _current_t;
         std::atomic_flag _accessing_ts_and_are_increases;
         QRectF _paint_area;
@@ -486,6 +499,13 @@ namespace chameleon {
             while (!_renderer_ready.load(std::memory_order_acquire)) {
             }
             _dvs_display_renderer->assign<Iterator>(begin, end);
+        }
+
+        /// reset pixels
+        void reset() {
+            while (!_renderer_ready.load(std::memory_order_acquire)) {
+            }
+            _dvs_display_renderer->reset();
         }
 
         /// componentComplete is called when all the qml values are bound.
