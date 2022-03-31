@@ -51,7 +51,9 @@ namespace chameleon {
         template <typename Event>
         void push(Event event) {
             const auto index =
-                (static_cast<std::size_t>(event.x) + static_cast<std::size_t>(event.y) * _canvas_size.width()) * 3;
+                (static_cast<std::size_t>(event.x)
+                 + (_canvas_size.height() - (static_cast<std::size_t>(event.y) + 1)) * _canvas_size.width())
+                * 3;
             while (_accessing_colors.test_and_set(std::memory_order_acquire)) {
             }
             _colors[index] = static_cast<float>(event.r);

@@ -77,7 +77,8 @@ namespace chameleon {
         template <typename Event>
         void push(Event event) {
             const auto index =
-                static_cast<std::size_t>(event.x) + static_cast<std::size_t>(event.y) * _canvas_size.width();
+                static_cast<std::size_t>(event.x)
+                + (_canvas_size.height() - (static_cast<std::size_t>(event.y) + 1)) * _canvas_size.width();
             while (_accessing_delta_ts.test_and_set(std::memory_order_acquire)) {
             }
             _delta_ts[index] = static_cast<uint32_t>(event.delta_t);

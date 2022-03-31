@@ -37,7 +37,7 @@ namespace chameleon {
             _program_setup(false) {
             for (auto iterator = _ts_and_are_increases.begin(); iterator != _ts_and_are_increases.end();
                  std::advance(iterator, 2)) {
-                *iterator = -std::numeric_limits<float>::infinity();
+                *iterator = 0;
             }
             _accessing_ts_and_are_increases.clear(std::memory_order_release);
         }
@@ -63,7 +63,9 @@ namespace chameleon {
         template <typename Event>
         void push(Event event) {
             const auto index =
-                (static_cast<std::size_t>(event.x) + static_cast<std::size_t>(event.y) * _canvas_size.width()) * 2;
+                (static_cast<std::size_t>(event.x)
+                 + (_canvas_size.height() - (static_cast<std::size_t>(event.y) + 1)) * _canvas_size.width())
+                * 2;
             while (_accessing_ts_and_are_increases.test_and_set(std::memory_order_acquire)) {
             }
             _ts_and_are_increases[index] = static_cast<uint32_t>(event.t);
